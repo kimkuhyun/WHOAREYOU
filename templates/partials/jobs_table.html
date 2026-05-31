@@ -1,0 +1,843 @@
+{% set source_badges = {
+  'saramin': ('bg-orange-100 text-orange-800', '사람인'),
+  'jobkorea': ('bg-sky-100 text-sky-800', '잡코리아'),
+  'wanted': ('bg-violet-100 text-violet-800', '원티드'),
+  'manual': ('bg-slate-100 text-slate-700', '수동'),
+  'homepage': ('bg-emerald-100 text-emerald-800', '홈페이지'),
+} %}
+
+{% set status_meta = {
+  'none':       ('미지원',  'bg-slate-100 text-slate-600 border-slate-200'),
+  'interested': ('관심',    'bg-sky-100 text-sky-700 border-sky-200'),
+  'applied':    ('지원함',  'bg-brand-100 text-brand-800 border-brand-300'),
+  'interview':  ('면접',    'bg-amber-100 text-amber-800 border-amber-300'),
+  'passed':     ('합격',    'bg-emerald-100 text-emerald-800 border-emerald-300'),
+  'rejected':   ('불합격',  'bg-rose-100 text-rose-700 border-rose-200'),
+} %}
+
+{% set status_order = ['none','interested','applied','interview','passed','rejected'] %}
+
+{# ATS 매칭 점수 → 색상 (높음=녹색, 중간=앰버, 낮음=회색).
+   has_resume=True인데 매칭 정보 없으면 회색 "매칭불가" 배지 표시. #}
+{% macro match_badge(match, has_resume=False) -%}
+  {%- if match is mapping and match.get('score') is not none -%}
+    {%- set score = match.get('score') -%}
+    {%- if score >= 70 -%}
+      {% set cls = 'bg-emerald-100 text-emerald-700 border-emerald-200' %}
+    {%- elif score >= 40 -%}
+      {% set cls = 'bg-amber-100 text-amber-700 border-amber-200' %}
+    {%- elif score >= 1 -%}
+      {% set cls = 'bg-slate-100 text-slate-600 border-slate-200' %}
+    {%- else -%}
+      {% set cls = 'bg-rose-50 text-rose-600 border-rose-200' %}
+    {%- endif -%}
+    {%- set miss = (match.get('missing_required') or [])|length -%}
+    <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold {{ cls }}"
+          title="매칭 {{ score }}% · 필수 매칭 {{ (match.get('matched_required') or [])|length }}/{{ (match.get('matched_required') or [])|length + miss }} · 우대 매칭 {{ (match.get('matched_preferred') or [])|length }}/{{ (match.get('matched_preferred') or [])|length + (match.get('missing_preferred') or [])|length }}">
+      <i data-lucide="target" class="h-3 w-3"></i>
+      매칭 {{ score }}%
+      {%- if miss > 0 %} · ⚠{{ miss }}{% endif %}
+    </span>
+  {%- elif has_resume -%}
+    <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-400"
+          title="공고에서 자격요건/우대사항 헤더를 인식하지 못해 매칭 키워드가 없습니다 — 본문은 모달에서 확인 가능">
+      <i data-lucide="circle-off" class="h-3 w-3"></i>
+      매칭 불가
+    </span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro short_deadline(text) -%}
+  {%- if not text -%}—
+  {%- else -%}
+    {%- set t = text.replace('입사지원', '').replace('홈페이지지원', '').replace('접수마감', '').strip() -%}
+    {{ t if t else text }}
+  {%- endif -%}
+{%- endmacro %}
+
+{# ─── ATS 매칭 안내 배너 (매칭순 정렬인데 매칭 데이터 부족할 때) ─── #}
+{% if sort == 'match' %}
+  {% if not has_resume %}
+    <div class="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+      <div class="flex items-center gap-2 font-semibold">
+        <i data-lucide="info" class="h-4 w-4"></i> 이력서가 필요합니다
+      </div>
+      <p class="mt-1 leading-relaxed">
+        ATS 매칭은 이력서 본문과 공고 키워드를 비교합니다.
+        <a href="/resume" class="font-semibold text-brand-700 hover:underline">이력서 작성 →</a>
+        또는 PDF 첨부 후 다시 시도하세요.
+      </p>
+    </div>
+  {% else %}
+    {% set jd_ready = rows|selectattr('0.jd_md')|list|length %}
+    {% if jd_ready == 0 %}
+      <div class="mb-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-800">
+        <div class="flex items-center gap-2 font-semibold">
+          <i data-lucide="info" class="h-4 w-4"></i> 본문 추출이 필요합니다
+        </div>
+        <p class="mt-1 leading-relaxed">
+          매칭하려면 각 공고의 본문이 있어야 합니다. 헤더 체크박스로 전체 선택 후
+          상단 <b>"본문 추출"</b> 버튼을 누르면 백그라운드에서 일괄 추출합니다.
+          추출되는 대로 매칭 점수가 자동 표시됩니다.
+        </p>
+      </div>
+    {% elif jd_ready < rows|length %}
+      <div class="mb-3 rounded-xl border border-sky-100 bg-sky-50/60 px-4 py-2.5 text-xs text-sky-700">
+        <i data-lucide="info" class="inline h-3.5 w-3.5"></i>
+        본문 추출된 공고는 매칭 점수 표시,
+        <b>{{ rows|length - jd_ready }}건</b>은 본문이 없어 매칭 안 됨 — 체크 후 "본문 추출"로 처리하세요.
+      </div>
+    {% endif %}
+  {% endif %}
+{% endif %}
+
+{# ─── 상단 통계 + 페이지 정보 + 상태별 칩 ─── #}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+  <div class="flex items-center gap-3">
+    <span>총 <span class="font-semibold text-slate-800">{{ total_jobs }}</span>건</span>
+    {% if page_info and page_info.total != total_jobs %}
+      <span class="text-slate-300">·</span>
+      <span>필터 <span class="font-semibold text-brand-700">{{ page_info.total }}</span>건</span>
+    {% endif %}
+    {% if page_info and page_info.total > 0 %}
+      <span class="text-slate-300">·</span>
+      <span>현재 <span class="font-semibold text-slate-800">{{ page_info.start_idx }}-{{ page_info.end_idx }}</span></span>
+    {% endif %}
+    <span class="text-slate-300">·</span>
+    <span>회사 <span class="font-semibold text-slate-800">{{ total_companies }}</span>개</span>
+    <span class="text-slate-300">·</span>
+    <span>즐겨찾기 <span class="font-semibold text-amber-600">{{ favorite_count }}</span></span>
+  </div>
+  <div class="flex flex-wrap gap-1">
+    {% for code in status_order %}
+      {% set meta = status_meta[code] %}
+      {% set cnt = (status_counts or {}).get(code, 0) %}
+      <span class="rounded-full border px-2 py-0.5 text-[11px] font-medium {{ meta[1] }}"
+            title="{{ meta[0] }} 상태">{{ meta[0] }} <span class="font-semibold">{{ cnt }}</span></span>
+    {% endfor %}
+  </div>
+  {% if q or source or favorite or status %}
+    <div class="basis-full text-[11px] text-slate-500">필터:
+      {% if q %}q="{{ q }}"{% endif %}
+      {% if source %} · source={{ source }}{% endif %}
+      {% if favorite %} · ★즐겨찾기{% endif %}
+      {% if status %} · 상태={{ status_meta.get(status, (status,))[0] }}{% endif %}
+    </div>
+  {% endif %}
+</div>
+
+{# ─── 카드 리스트 (헤더 한 줄 + 행 카드들) — view 모드별 클래스 분기 ─── #}
+<style>
+  /* compact 뷰: 행 패딩 축소, 메타 라인 한 줄로 축소 */
+  .jobs-view-compact > ul > li[data-job-row] { padding-top: .5rem !important; padding-bottom: .5rem !important; }
+  .jobs-view-compact > ul > li[data-job-row] .mt-1 { display: none; }
+  .jobs-view-compact > ul > li[data-job-row] select.status-select { padding-top: .25rem; padding-bottom: .25rem; }
+
+  /* ─── 스크롤 paint 최적화 ───
+     content-visibility: auto → 화면 밖 행/카드는 paint 자체를 skip
+     contain-intrinsic-size → 예상 높이 힌트 (스크롤바 jumping 방지)
+     빠른 스크롤 시 paint queue overflow 방지의 핵심 */
+  .jobs-container [data-job-row] {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 96px;  /* 리스트 행 ~80px / 카드 ~200px 평균 */
+  }
+  .jobs-view-card [data-job-row] {
+    contain-intrinsic-size: 0 240px;
+  }
+</style>
+<div class="jobs-container rounded-2xl bg-white shadow-sm overflow-hidden jobs-view-{{ view or 'list' }}">
+  {# 컬럼 헤더 — 카드뷰엔 안 보임, 좁은 화면에선 숨김 #}
+  {% if view != 'card' %}
+  <div class="hidden md:grid items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500"
+       style="grid-template-columns: 28px 28px 1fr 180px 180px">
+    <div class="text-center">
+      <input type="checkbox" id="jobs-select-all"
+             onchange="toggleSelectAll(this)"
+             class="rounded border-slate-300 text-brand-600 focus:ring-brand-400"
+             title="페이지의 모든 행 선택/해제" />
+    </div>
+    <div class="text-center">★</div>
+    <div>채용공고</div>
+    <div>지원상태</div>
+    <div class="text-center">액션</div>
+  </div>
+  {% endif %}
+
+  {% if view == 'card' %}
+    {# ─── 카드 뷰: 반응형 그리드 (sm:2열 / xl:3열) ─── #}
+    <div class="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+      {% for job, company, match in rows %}
+        {% set badge = source_badges.get(job.source, ('bg-slate-100 text-slate-700', job.source)) %}
+        {% set cur_status = job.application_status or 'none' %}
+        {% set s_meta = status_meta.get(cur_status, status_meta['none']) %}
+        <article class="group relative flex flex-col gap-2.5 rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-brand-300"
+                 data-job-row="{{ job.id }}">
+
+          {# 헤더 줄: 체크/즐겨찾기/뱃지/본문 인디케이터 (왼) + 매칭 배지 (오) #}
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <input type="checkbox" class="job-select rounded border-slate-300 text-brand-600 focus:ring-brand-400"
+                     data-job-id="{{ job.id }}" onchange="updateSelectionUI()" />
+              <button type="button"
+                      data-job-id="{{ job.id }}"
+                      data-fav="{{ '1' if job.favorite else '0' }}"
+                      onclick="toggleFavorite(this)"
+                      class="favorite-btn inline-flex items-center justify-center transition-transform hover:scale-110 {% if job.favorite %}text-amber-500{% else %}text-slate-300 hover:text-amber-400{% endif %}"
+                      title="{% if job.favorite %}즐겨찾기 해제{% else %}즐겨찾기 추가{% endif %}">
+                <i data-lucide="star" class="h-4 w-4" {% if job.favorite %}fill="currentColor"{% endif %}></i>
+              </button>
+              <span class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold {{ badge[0] }}">{{ badge[1] }}</span>
+              <span class="jd-status inline-flex items-center"
+                    data-job-id="{{ job.id }}"
+                    data-state="{% if job.jd_md %}ready{% else %}empty{% endif %}">
+                {% if job.jd_md %}
+                  <i data-lucide="check-circle-2" class="h-3.5 w-3.5 text-emerald-500"
+                     title="본문 추출됨 ({{ job.jd_md|length }}자) — 제목 클릭 시 모달"></i>
+                {% else %}
+                  <i data-lucide="circle-dashed" class="h-3.5 w-3.5 text-slate-300"
+                     title="본문 미추출 — 제목 클릭 시 백그라운드 추출 시작"></i>
+                {% endif %}
+              </span>
+            </div>
+            <div class="shrink-0">
+              {{ match_badge(match, has_resume) }}
+            </div>
+          </div>
+
+          {# 제목 — 클릭 시 본문 모달/추출 #}
+          <button type="button"
+                  data-job-id="{{ job.id }}"
+                  data-job-title="{{ job.title }}"
+                  data-job-url="{{ job.url }}"
+                  data-has-jd="{% if job.jd_md %}1{% else %}0{% endif %}"
+                  onclick="openJobBody(this.dataset.jobId, this.dataset.jobTitle, this.dataset.jobUrl, this.dataset.hasJd === '1')"
+                  class="text-left"
+                  title="본문 보기 / 추출 — {{ job.title }}">
+            <h3 class="line-clamp-2 min-h-[2.5rem] text-sm font-bold leading-snug text-slate-800 group-hover:text-brand-700">{{ job.title }}</h3>
+          </button>
+
+          {# 회사 #}
+          <div class="text-[12px]">
+            {% if company %}
+              <a href="/company/{{ company.id }}"
+                 class="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline"
+                 title="{{ company.name }}">
+                <i data-lucide="building-2" class="h-3.5 w-3.5"></i>
+                <span class="line-clamp-1">{{ company.name }}</span>
+              </a>
+            {% else %}
+              <span class="inline-flex items-center gap-1 text-slate-400">
+                <i data-lucide="building-2" class="h-3.5 w-3.5"></i> —
+              </span>
+            {% endif %}
+          </div>
+
+          {# 메타: 위치/마감/시각 #}
+          <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+            <span class="inline-flex items-center gap-1" title="{{ job.location or '' }}">
+              <i data-lucide="map-pin" class="h-3 w-3"></i>
+              <span class="line-clamp-1">{{ job.location or '—' }}</span>
+            </span>
+            <span class="inline-flex items-center gap-1" title="{{ job.deadline or '' }}">
+              <i data-lucide="calendar" class="h-3 w-3"></i>
+              <span>{{ short_deadline(job.deadline) }}</span>
+            </span>
+            <span class="inline-flex items-center gap-1 text-slate-400">
+              <i data-lucide="clock" class="h-3 w-3"></i>
+              <span>{{ job.captured_at.strftime('%m-%d %H:%M') if job.captured_at else '' }}</span>
+            </span>
+          </div>
+
+          {# 푸터 (mt-auto로 카드 하단 고정): 지원상태 + 액션 버튼들 #}
+          <div class="mt-auto space-y-2 pt-1">
+            <select class="status-select w-full rounded-md border px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-300 {{ s_meta[1] }}"
+                    data-job-id="{{ job.id }}"
+                    data-prev="{{ cur_status }}"
+                    onchange="changeStatus(this)"
+                    title="{% if job.status_note %}{{ job.status_note }}{% else %}지원상태 변경{% endif %}">
+              {% for code in status_order %}
+                <option value="{{ code }}" {% if cur_status == code %}selected{% endif %}>{{ status_meta[code][0] }}</option>
+              {% endfor %}
+            </select>
+            <div class="flex items-center gap-1">
+              <a href="{{ job.url }}" target="_blank" rel="noopener"
+                 class="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                 title="원문 사이트({{ job.source }})에서 새 탭으로 열기">
+                <i data-lucide="external-link" class="h-3 w-3"></i>
+                원문
+              </a>
+              {% if company %}
+                <a href="/company/{{ company.id }}"
+                   class="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+                   title="회사 페이지로 이동">
+                  <span>회사</span>
+                  <i data-lucide="arrow-right" class="h-3 w-3"></i>
+                </a>
+              {% endif %}
+              <button type="button" onclick="deleteJob(this, {{ job.id }})"
+                      class="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                      title="이 공고 삭제">
+                <i data-lucide="trash-2" class="h-3.5 w-3.5"></i>
+              </button>
+            </div>
+          </div>
+        </article>
+      {% else %}
+        <div class="col-span-full px-5 py-16 text-center text-sm text-slate-400">
+          <i data-lucide="inbox" class="mx-auto mb-2 h-8 w-8 text-slate-300"></i>
+          <div>조건에 맞는 공고가 없습니다.</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+  <ul class="divide-y divide-slate-100">
+    {% for job, company, match in rows %}
+      {% set badge = source_badges.get(job.source, ('bg-slate-100 text-slate-700', job.source)) %}
+      {% set cur_status = job.application_status or 'none' %}
+      {% set s_meta = status_meta.get(cur_status, status_meta['none']) %}
+      <li class="group grid items-center gap-3 px-5 py-4 transition-colors hover:bg-brand-50/30"
+          style="grid-template-columns: 28px 28px 1fr 180px 180px"
+          data-job-row="{{ job.id }}">
+
+        {# 체크박스 #}
+        <div class="text-center">
+          <input type="checkbox" class="job-select rounded border-slate-300 text-brand-600 focus:ring-brand-400"
+                 data-job-id="{{ job.id }}" onchange="updateSelectionUI()" />
+        </div>
+
+        {# 즐겨찾기 #}
+        <div class="text-center">
+          <button
+            type="button"
+            data-job-id="{{ job.id }}"
+            data-fav="{{ '1' if job.favorite else '0' }}"
+            onclick="toggleFavorite(this)"
+            class="favorite-btn inline-flex items-center justify-center transition-transform hover:scale-110 {% if job.favorite %}text-amber-500{% else %}text-slate-300 hover:text-amber-400{% endif %}"
+            title="{% if job.favorite %}즐겨찾기 해제{% else %}즐겨찾기 추가{% endif %}"
+          >
+            <i data-lucide="star" class="h-4 w-4" {% if job.favorite %}fill="currentColor"{% endif %}></i>
+          </button>
+        </div>
+
+        {# 채용공고 (출처 뱃지 + 본문 인디케이터 + 제목 + 메타) — 제목 클릭 시 모달 OR 백그라운드 추출 #}
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold {{ badge[0] }}">{{ badge[1] }}</span>
+            {# 본문 상태 인디케이터 — 캐시 있으면 녹색 체크 / 없으면 회색 점 / 추출 중이면 스피너 #}
+            <span class="jd-status inline-flex items-center"
+                  data-job-id="{{ job.id }}"
+                  data-state="{% if job.jd_md %}ready{% else %}empty{% endif %}">
+              {% if job.jd_md %}
+                <i data-lucide="check-circle-2" class="h-3.5 w-3.5 text-emerald-500"
+                   title="본문 추출됨 ({{ job.jd_md|length }}자) — 제목 클릭 시 모달"></i>
+              {% else %}
+                <i data-lucide="circle-dashed" class="h-3.5 w-3.5 text-slate-300"
+                   title="본문 미추출 — 제목 클릭 시 백그라운드에서 추출 시작"></i>
+              {% endif %}
+            </span>
+            <button type="button"
+                    data-job-id="{{ job.id }}"
+                    data-job-title="{{ job.title }}"
+                    data-job-url="{{ job.url }}"
+                    data-has-jd="{% if job.jd_md %}1{% else %}0{% endif %}"
+                    onclick="openJobBody(this.dataset.jobId, this.dataset.jobTitle, this.dataset.jobUrl, this.dataset.hasJd === '1')"
+                    class="inline-flex items-center gap-1 text-left line-clamp-1 text-sm font-semibold text-slate-800 hover:text-brand-700 hover:underline"
+                    title="본문 보기 / 추출 — {{ job.title }}">
+              <span class="line-clamp-1">{{ job.title }}</span>
+            </button>
+            {# ATS 매칭 배지 — 이력서 있으면 항상 표시 (0%/매칭불가 포함) #}
+            {{ match_badge(match, has_resume) }}
+          </div>
+          <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-slate-500">
+            {% if company %}
+              <a href="/company/{{ company.id }}"
+                 class="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline"
+                 title="{{ company.name }}">
+                <i data-lucide="building-2" class="h-3 w-3"></i>
+                <span class="line-clamp-1">{{ company.name }}</span>
+              </a>
+            {% else %}
+              <span class="inline-flex items-center gap-1 text-slate-400">
+                <i data-lucide="building-2" class="h-3 w-3"></i> —
+              </span>
+            {% endif %}
+            <span class="inline-flex items-center gap-1" title="{{ job.location or '' }}">
+              <i data-lucide="map-pin" class="h-3 w-3"></i>
+              <span class="line-clamp-1">{{ job.location or '—' }}</span>
+            </span>
+            <span class="inline-flex items-center gap-1" title="{{ job.deadline or '' }}">
+              <i data-lucide="calendar" class="h-3 w-3"></i>
+              <span>{{ short_deadline(job.deadline) }}</span>
+            </span>
+            <span class="inline-flex items-center gap-1 text-slate-400">
+              <i data-lucide="clock" class="h-3 w-3"></i>
+              <span>{{ job.captured_at.strftime('%m-%d %H:%M') if job.captured_at else '' }}</span>
+            </span>
+          </div>
+        </div>
+
+        {# 지원상태 셀렉트 #}
+        <div>
+          <select
+            class="status-select w-full rounded-md border px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-300 {{ s_meta[1] }}"
+            data-job-id="{{ job.id }}"
+            data-prev="{{ cur_status }}"
+            onchange="changeStatus(this)"
+            title="{% if job.status_note %}{{ job.status_note }}{% else %}지원상태 변경{% endif %}"
+          >
+            {% for code in status_order %}
+              <option value="{{ code }}" {% if cur_status == code %}selected{% endif %}>{{ status_meta[code][0] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {# 액션 #}
+        <div class="flex items-center justify-end gap-1">
+          <a href="{{ job.url }}" target="_blank" rel="noopener"
+             class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+             title="원문 사이트({{ job.source }})에서 새 탭으로 열기">
+            <i data-lucide="external-link" class="h-3 w-3"></i>
+            원문
+          </a>
+          {% if company %}
+            <a href="/company/{{ company.id }}"
+               class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+               title="회사 페이지로 이동">
+              <span>회사</span>
+              <i data-lucide="arrow-right" class="h-3 w-3"></i>
+            </a>
+          {% endif %}
+          <button type="button" onclick="deleteJob(this, {{ job.id }})"
+                  class="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                  title="이 공고 삭제">
+            <i data-lucide="trash-2" class="h-3.5 w-3.5"></i>
+          </button>
+        </div>
+      </li>
+    {% else %}
+      <li class="px-5 py-16 text-center text-sm text-slate-400">
+        <i data-lucide="inbox" class="mx-auto mb-2 h-8 w-8 text-slate-300"></i>
+        <div>조건에 맞는 공고가 없습니다.</div>
+      </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+{# ─── 페이지네이션 ─── #}
+{% if page_info and page_info.total_pages > 1 %}
+  {% set cur = page_info.page %}
+  {% set total_pages = page_info.total_pages %}
+  {# 표시할 페이지 범위 — 현재 ± 2, 양 끝 1·last 포함, 사이는 ... #}
+  {% set window = 2 %}
+  {% set pages_to_show = [] %}
+  {% set _ = pages_to_show.append(1) %}
+  {% for p in range(cur - window, cur + window + 1) %}
+    {% if p > 1 and p < total_pages and p not in pages_to_show %}
+      {% set _ = pages_to_show.append(p) %}
+    {% endif %}
+  {% endfor %}
+  {% if total_pages > 1 and total_pages not in pages_to_show %}
+    {% set _ = pages_to_show.append(total_pages) %}
+  {% endif %}
+
+  <nav class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm"
+       aria-label="공고 목록 페이지네이션">
+    <div class="text-xs text-slate-500">
+      <b class="text-slate-700">{{ page_info.start_idx }}</b>-<b class="text-slate-700">{{ page_info.end_idx }}</b>
+      / 총 <b class="text-slate-700">{{ page_info.total }}</b>건
+    </div>
+    <ul class="flex flex-wrap items-center gap-1">
+      {# 이전 #}
+      <li>
+        <button type="button"
+                hx-get="/api/jobs"
+                hx-target="#jobs-table"
+                hx-include="#jobs-filter-form"
+                hx-vals='{"page": {{ cur - 1 }}}'
+                {% if not page_info.has_prev %}disabled{% endif %}
+                class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="이전 페이지">
+          <i data-lucide="chevron-left" class="h-4 w-4"></i>
+        </button>
+      </li>
+      {# 페이지 번호들 #}
+      {% set prev_p = 0 %}
+      {% for p in pages_to_show %}
+        {% if prev_p and p - prev_p > 1 %}
+          <li class="px-1 text-xs text-slate-400">…</li>
+        {% endif %}
+        <li>
+          <button type="button"
+                  hx-get="/api/jobs"
+                  hx-target="#jobs-table"
+                  hx-include="#jobs-filter-form"
+                  hx-vals='{"page": {{ p }}}'
+                  class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-md border px-2 text-sm font-medium
+                         {% if p == cur %}bg-brand-600 border-brand-600 text-white{% else %}border-slate-200 bg-white text-slate-700 hover:bg-brand-50 hover:text-brand-700{% endif %}"
+                  {% if p == cur %}aria-current="page"{% endif %}>
+            {{ p }}
+          </button>
+        </li>
+        {% set prev_p = p %}
+      {% endfor %}
+      {# 다음 #}
+      <li>
+        <button type="button"
+                hx-get="/api/jobs"
+                hx-target="#jobs-table"
+                hx-include="#jobs-filter-form"
+                hx-vals='{"page": {{ cur + 1 }}}'
+                {% if not page_info.has_next %}disabled{% endif %}
+                class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="다음 페이지">
+          <i data-lucide="chevron-right" class="h-4 w-4"></i>
+        </button>
+      </li>
+    </ul>
+  </nav>
+{% endif %}
+
+<script>
+// 즐겨찾기 토글
+window.toggleFavorite = async function(btn) {
+  const id = btn.dataset.jobId;
+  try {
+    const r = await fetch(`/api/jobs/${id}/favorite`, {method: 'POST'});
+    if (!r.ok) throw new Error(`${r.status}`);
+    const data = await r.json();
+    const svg = btn.querySelector('svg');
+    if (data.favorite) {
+      btn.classList.remove('text-slate-300', 'hover:text-amber-400');
+      btn.classList.add('text-amber-500');
+      btn.title = '즐겨찾기 해제';
+      if (svg) svg.setAttribute('fill', 'currentColor');
+    } else {
+      btn.classList.add('text-slate-300', 'hover:text-amber-400');
+      btn.classList.remove('text-amber-500');
+      btn.title = '즐겨찾기 추가';
+      if (svg) svg.setAttribute('fill', 'none');
+    }
+    btn.dataset.fav = data.favorite ? '1' : '0';
+  } catch (e) {
+    window.toast && window.toast('error', `토글 실패: ${e.message}`);
+  }
+};
+
+// 전체 선택
+window.toggleSelectAll = function(master) {
+  document.querySelectorAll('.job-select').forEach(cb => { cb.checked = master.checked; });
+  updateSelectionUI();
+};
+
+window.getSelectedJobIds = function() {
+  return Array.from(document.querySelectorAll('.job-select:checked'))
+    .map(cb => parseInt(cb.dataset.jobId, 10))
+    .filter(n => !isNaN(n));
+};
+
+window.updateSelectionUI = function() {
+  const ids = window.getSelectedJobIds();
+  document.dispatchEvent(new CustomEvent('jobs:selection', { detail: { count: ids.length, ids } }));
+  const master = document.getElementById('jobs-select-all');
+  const all = document.querySelectorAll('.job-select');
+  if (master && all.length) {
+    if (ids.length === 0) { master.checked = false; master.indeterminate = false; }
+    else if (ids.length === all.length) { master.checked = true; master.indeterminate = false; }
+    else { master.checked = false; master.indeterminate = true; }
+  }
+};
+
+// 지원상태 색상 토글 — partial이 htmx로 매번 swap되므로 const 대신 window.*로 안전 할당
+window.STATUS_CLASSES = {
+  none:       'bg-slate-100 text-slate-600 border-slate-200',
+  interested: 'bg-sky-100 text-sky-700 border-sky-200',
+  applied:    'bg-brand-100 text-brand-800 border-brand-300',
+  interview:  'bg-amber-100 text-amber-800 border-amber-300',
+  passed:     'bg-emerald-100 text-emerald-800 border-emerald-300',
+  rejected:   'bg-rose-100 text-rose-700 border-rose-200',
+};
+
+window.changeStatus = async function(sel) {
+  const id = sel.dataset.jobId;
+  const next = sel.value;
+  const prev = sel.dataset.prev || 'none';
+  Object.values(window.STATUS_CLASSES).forEach(cls => cls.split(' ').forEach(c => sel.classList.remove(c)));
+  (window.STATUS_CLASSES[next] || '').split(' ').forEach(c => c && sel.classList.add(c));
+  try {
+    const r = await fetch(`/api/jobs/${id}/status`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: next}),
+    });
+    if (!r.ok) throw new Error(`${r.status}`);
+    sel.dataset.prev = next;
+    window.toast && window.toast('success', `상태: ${sel.options[sel.selectedIndex].text}`);
+    htmx.trigger('#jobs-filter-form', 'submit');
+  } catch (e) {
+    sel.value = prev;
+    Object.values(window.STATUS_CLASSES).forEach(cls => cls.split(' ').forEach(c => sel.classList.remove(c)));
+    (window.STATUS_CLASSES[prev] || '').split(' ').forEach(c => c && sel.classList.add(c));
+    window.toast && window.toast('error', `상태 변경 실패: ${e.message}`);
+  }
+};
+
+// 단일 삭제
+window.deleteJob = async function(btn, id) {
+  const result = await Swal.fire({
+    title: '이 공고를 삭제할까요?', text: '삭제 후 되돌릴 수 없습니다.',
+    icon: 'warning', showCancelButton: true,
+    confirmButtonText: '삭제', cancelButtonText: '취소', confirmButtonColor: '#dc2626',
+  });
+  if (!result.isConfirmed) return;
+  try {
+    const r = await fetch(`/api/jobs/${id}`, {method: 'DELETE'});
+    if (!r.ok) throw new Error(`${r.status}`);
+    const row = btn.closest('[data-job-row]');  // <li> (list/compact) or <article> (card)
+    row && row.remove();
+    window.toast && window.toast('success', '삭제 완료');
+    htmx.trigger('#jobs-filter-form', 'submit');
+  } catch (e) {
+    window.toast && window.toast('error', `삭제 실패: ${e.message}`);
+  }
+};
+
+document.addEventListener('htmx:afterSwap', (e) => {
+  if (e.target && e.target.id === 'jobs-table') {
+    updateSelectionUI();
+  }
+});
+updateSelectionUI();
+
+// ─── 공고 본문 — 비차단 백그라운드 추출 + 상태 인디케이터 ──────────────────
+// 진행 중인 job_id들을 추적 (중복 fetch 방지)
+window._jdInflight = window._jdInflight || new Set();
+
+// 마크다운 → HTML 렌더링
+function _jdRenderMd(md) {
+  if (!md) return '<div class="p-6 text-center text-sm text-slate-400">본문이 비어 있습니다.</div>';
+  const raw = (window.marked ? marked.parse(md, { gfm: true, breaks: true }) : md);
+  return window.DOMPurify ? DOMPurify.sanitize(raw) : raw;
+}
+
+function _jdFooter(url, status) {
+  return `
+    <div class="flex items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+      <span>${status || ''}</span>
+      <a href="${url}" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-brand-50 hover:text-brand-700">
+        원문 사이트로 이동 ↗
+      </a>
+    </div>`;
+}
+
+// 인디케이터 상태 변경 헬퍼
+function _jdSetState(jobId, state, opts) {
+  opts = opts || {};
+  const el = document.querySelector(`.jd-status[data-job-id="${jobId}"]`);
+  if (!el) return;
+  el.dataset.state = state;
+  let html = '';
+  if (state === 'loading') {
+    html = `<i data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin text-brand-600" title="본문 추출 중..."></i>`;
+  } else if (state === 'ready') {
+    const chars = opts.chars || '';
+    html = `<i data-lucide="check-circle-2" class="h-3.5 w-3.5 text-emerald-500" title="본문 추출됨 ${chars}자 — 제목 클릭 시 모달"></i>`;
+  } else if (state === 'error') {
+    html = `<i data-lucide="alert-circle" class="h-3.5 w-3.5 text-rose-500" title="${opts.msg || '추출 실패 — 다시 클릭'}"></i>`;
+  } else {
+    html = `<i data-lucide="circle-dashed" class="h-3.5 w-3.5 text-slate-300" title="본문 미추출 — 제목 클릭 시 백그라운드 추출"></i>`;
+  }
+  el.innerHTML = html;
+  // 잡 테이블 셀의 button data-has-jd도 동기화 (다음 클릭 시 분기에 영향)
+  const btn = document.querySelector(`button[data-job-id="${jobId}"][data-job-url]`);
+  if (btn) btn.dataset.hasJd = (state === 'ready') ? '1' : '0';
+  if (window.refreshLucide) window.refreshLucide();
+}
+
+// ATS 매칭 카드 렌더링 (모달 상단)
+function _jdMatchCard(atsMatch) {
+  if (!atsMatch || atsMatch.score === null || atsMatch.score === undefined) {
+    return `
+      <div class="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+        <span class="font-semibold text-slate-700">ATS 매칭 정보 없음</span>
+        — 이력서를 작성하거나 공고에 자격요건/우대사항이 있어야 자동 매칭됩니다.
+        <a href="/resume" class="ml-1 text-brand-600 hover:underline">이력서 작성 →</a>
+      </div>`;
+  }
+  const score = atsMatch.score;
+  let bg, text, ring;
+  if (score >= 70) { bg='bg-emerald-50'; text='text-emerald-800'; ring='ring-emerald-200'; }
+  else if (score >= 40) { bg='bg-amber-50'; text='text-amber-800'; ring='ring-amber-200'; }
+  else { bg='bg-slate-50'; text='text-slate-700'; ring='ring-slate-200'; }
+  const matchedR = atsMatch.matched_required || [];
+  const missR = atsMatch.missing_required || [];
+  const matchedP = atsMatch.matched_preferred || [];
+  const missP = atsMatch.missing_preferred || [];
+  const chip = (label, cls) =>
+    `<span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}">${label}</span>`;
+  const okChip = (l) => chip(l, 'border-emerald-200 bg-emerald-50 text-emerald-700');
+  const missChip = (l) => chip(l, 'border-rose-200 bg-rose-50 text-rose-700');
+  const prefChip = (l) => chip(l, 'border-sky-200 bg-sky-50 text-sky-700');
+  const prefMissChip = (l) => chip(l, 'border-slate-200 bg-white text-slate-500');
+
+  return `
+    <div class="rounded-xl ${bg} p-4 ring-1 ${ring}">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="target" class="h-4 w-4 ${text}"></i>
+          <span class="text-sm font-semibold ${text}">ATS 매칭 점수</span>
+          <span class="text-2xl font-extrabold ${text}">${score}%</span>
+        </div>
+        <div class="text-[11px] text-slate-500">
+          기업 채용 ATS 알고리즘 (필수×3 + 우대×1) 차용
+        </div>
+      </div>
+      <div class="mt-3 space-y-2 text-xs">
+        ${matchedR.length > 0 ? `
+          <div>
+            <div class="font-semibold text-emerald-700 mb-1">✓ 매칭된 필수 (${matchedR.length})</div>
+            <div class="flex flex-wrap gap-1">${matchedR.map(okChip).join('')}</div>
+          </div>` : ''}
+        ${missR.length > 0 ? `
+          <div>
+            <div class="font-semibold text-rose-700 mb-1">⚠ 누락된 필수 (${missR.length}) — 이력서에 추가하면 점수 상승</div>
+            <div class="flex flex-wrap gap-1">${missR.map(missChip).join('')}</div>
+          </div>` : ''}
+        ${matchedP.length > 0 ? `
+          <div>
+            <div class="font-semibold text-sky-700 mb-1">+ 매칭된 우대 (${matchedP.length})</div>
+            <div class="flex flex-wrap gap-1">${matchedP.map(prefChip).join('')}</div>
+          </div>` : ''}
+        ${missP.length > 0 ? `
+          <div>
+            <div class="font-semibold text-slate-500 mb-1">우대 가능 항목 (${missP.length})</div>
+            <div class="flex flex-wrap gap-1">${missP.map(prefMissChip).join('')}</div>
+          </div>` : ''}
+      </div>
+    </div>`;
+}
+
+// 본문 모달 표시 (캐시된 md로) — 매칭 카드 + 본문
+async function _jdShowModal(jobId, jobTitle, jobUrl, jdMd, fetchedAt, atsMatch) {
+  Swal.fire({
+    title: jobTitle || '공고 본문',
+    width: '900px',
+    customClass: { popup: 'rounded-2xl text-left', htmlContainer: 'text-left' },
+    showCloseButton: true,
+    showConfirmButton: false,
+    focusConfirm: false,
+    html: `
+      <div class="space-y-4">
+        ${_jdMatchCard(atsMatch)}
+        <article class="md-prose max-h-[60vh] overflow-y-auto px-1 rounded-lg border border-slate-100 bg-white p-4">${_jdRenderMd(jdMd)}</article>
+      </div>
+      ${_jdFooter(jobUrl, `· 추출 ${fetchedAt ? new Date(fetchedAt).toLocaleString() : ''} · ${(jdMd || '').length}자`)}
+      <div class="mt-3 text-right">
+        <button type="button" id="jd-refetch-btn" class="text-xs text-slate-400 hover:text-brand-700 hover:underline">다시 가져오기 (백그라운드)</button>
+      </div>
+    `,
+    didOpen: () => { if (window.lucide) window.lucide.createIcons(); },
+  });
+  setTimeout(() => {
+    const btn = document.getElementById('jd-refetch-btn');
+    if (btn) btn.addEventListener('click', () => {
+      Swal.close();
+      window.startJdFetch(jobId, jobTitle, jobUrl, true);
+    });
+  }, 50);
+}
+
+// 백그라운드 fetch 시작 (모달 안 띄움, 인디케이터만 업데이트)
+window.startJdFetch = async function(jobId, jobTitle, jobUrl, force) {
+  jobId = String(jobId);
+  if (window._jdInflight.has(jobId)) {
+    window.toast && window.toast('info', '이미 추출 중입니다');
+    return;
+  }
+  window._jdInflight.add(jobId);
+  _jdSetState(jobId, 'loading');
+  const shortTitle = (jobTitle || '공고').slice(0, 28);
+  window.toast && window.toast('info', `[${shortTitle}] 본문 추출 시작 — 다른 작업 계속 가능`);
+
+  try {
+    const url = `/api/jobs/${jobId}/fetch-jd${force ? '?force=1' : ''}`;
+    const r = await fetch(url, { method: 'POST' });
+    if (!r.ok) throw new Error(`fetch-jd ${r.status}`);
+    const d = await r.json();
+
+    if (d.status === 'cached' && !force) {
+      // 이미 캐시됨 — 인디케이터만 갱신
+      const r2 = await fetch(`/api/jobs/${jobId}`);
+      const j = r2.ok ? await r2.json() : null;
+      window._jdInflight.delete(jobId);
+      if (j && j.jd_md) {
+        _jdSetState(jobId, 'ready', { chars: (j.jd_md || '').length });
+        window.toast && window.toast('success', `[${shortTitle}] 본문 캐시 발견 — 클릭해서 보세요`);
+      }
+      return;
+    }
+
+    const taskId = d.task_id;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws/progress/${taskId}`);
+    ws.onmessage = async (msg) => {
+      try {
+        const e = JSON.parse(msg.data);
+        if (e.pct >= 100) {
+          ws.close();
+          const r2 = await fetch(`/api/jobs/${jobId}`);
+          const j = r2.ok ? await r2.json() : null;
+          window._jdInflight.delete(jobId);
+          if (j && j.jd_md) {
+            _jdSetState(jobId, 'ready', { chars: (j.jd_md || '').length });
+            window.toast && window.toast('success', `[${shortTitle}] 본문 추출 완료 — 클릭해서 보세요`);
+          } else {
+            const msg = (j && j.jd_error) || '본문을 추출하지 못했습니다';
+            _jdSetState(jobId, 'error', { msg });
+            window.toast && window.toast('warning', `[${shortTitle}] 추출 실패: ${msg.slice(0, 80)}`);
+          }
+        }
+      } catch (_) {}
+    };
+    ws.onerror = () => {
+      window._jdInflight.delete(jobId);
+      _jdSetState(jobId, 'error', { msg: 'WebSocket 오류' });
+      window.toast && window.toast('error', `[${shortTitle}] 진행도 연결 실패`);
+    };
+    ws.onclose = () => {
+      // 100% 안 받고 끊기면 안전장치 — 한 번 결과 조회
+      if (window._jdInflight.has(jobId)) {
+        window._jdInflight.delete(jobId);
+        fetch(`/api/jobs/${jobId}`).then(r => r.ok ? r.json() : null).then(j => {
+          if (j && j.jd_md) _jdSetState(jobId, 'ready', { chars: (j.jd_md || '').length });
+          else _jdSetState(jobId, 'error', { msg: '연결 종료됨' });
+        }).catch(() => _jdSetState(jobId, 'error', { msg: '결과 조회 실패' }));
+      }
+    };
+  } catch (e) {
+    window._jdInflight.delete(jobId);
+    _jdSetState(jobId, 'error', { msg: e.message });
+    window.toast && window.toast('error', `추출 시작 실패: ${e.message}`);
+  }
+};
+
+// 진입점 — 제목 클릭 시 호출됨
+window.openJobBody = async function(jobId, jobTitle, jobUrl, hasJd) {
+  jobId = String(jobId);
+  if (hasJd) {
+    try {
+      const r = await fetch(`/api/jobs/${jobId}`);
+      if (r.ok) {
+        const j = await r.json();
+        if (j.jd_md) {
+          _jdShowModal(jobId, jobTitle, jobUrl, j.jd_md, j.jd_fetched_at, j.ats_match);
+          return;
+        }
+      }
+    } catch (_) {}
+  }
+  // 캐시 없음 — 백그라운드 추출 시작 (비차단)
+  window.startJdFetch(jobId, jobTitle, jobUrl, false);
+};
+</script>

@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+
+{% block title %}공고 상세 · WHOAREYOU{% endblock %}
+{% block header %}공고 상세{% endblock %}
+{% block page_max_width %}max-w-6xl{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<style>
+  .jd-prose { font-size: 14px; line-height: 1.7; color: #1e293b; }
+  .jd-prose h1, .jd-prose h2, .jd-prose h3 { font-weight: 700; color: #065f46; margin-top: 1.1rem; margin-bottom: .4rem; }
+  .jd-prose h1 { font-size: 1.4rem; }
+  .jd-prose h2 { font-size: 1.2rem; border-bottom: 1px solid #d1fae5; padding-bottom: .25rem; }
+  .jd-prose h3 { font-size: 1.05rem; }
+  .jd-prose p { margin: .4rem 0; }
+  .jd-prose ul, .jd-prose ol { margin: .4rem 0 .4rem 1.3rem; }
+  .jd-prose li { margin: .2rem 0; }
+  .jd-prose code { background: #ecfdf5; padding: 1px 4px; border-radius: 4px; font-size: 12.5px; }
+  .jd-prose pre { background: #0f172a; color: #e2e8f0; padding: .8rem; border-radius: 8px; overflow-x: auto; font-size: 12.5px; }
+  .jd-prose blockquote { border-left: 3px solid #10b981; padding-left: .8rem; color: #475569; }
+  .jd-prose table { border-collapse: collapse; width: 100%; margin: .5rem 0; font-size: 13px; }
+  .jd-prose th, .jd-prose td { border: 1px solid #e2e8f0; padding: .4rem .6rem; }
+  .jd-prose th { background: #f0fdf4; }
+  .jd-prose a { color: #047857; text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="jobDetailApp({{ job_id }})" x-init="init()" class="space-y-5">
+
+  <!-- 뒤로가기 -->
+  <div class="flex items-center justify-between">
+    <a href="/jobs" class="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-brand-700">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>
+      <span>채용 검색으로 돌아가기</span>
+    </a>
+  </div>
+
+  <!-- 상단 헤더 -->
+  <section class="rounded-2xl bg-white p-6 shadow-sm">
+    <template x-if="loading">
+      <div class="flex items-center justify-center py-8 text-sm text-slate-400">
+        <i data-lucide="loader-2" class="mr-2 h-5 w-5 animate-spin text-brand-500"></i> 불러오는 중...
+      </div>
+    </template>
+    <template x-if="!loading && job">
+      <div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                :class="sourceBadge(job.source).cls" x-text="sourceBadge(job.source).label"></span>
+          <span class="rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                :class="statusColor(job.application_status)" x-text="statusLabel(job.application_status)"></span>
+          <template x-if="job.favorite">
+            <span class="inline-flex items-center gap-1 text-amber-600 text-xs">
+              <i data-lucide="star" class="h-3.5 w-3.5" fill="currentColor"></i> 즐겨찾기
+            </span>
+          </template>
+        </div>
+        <h1 class="mt-2 text-xl font-bold leading-tight text-slate-900" x-text="job.title"></h1>
+        <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+          <template x-if="job.company">
+            <a :href="`/company/${job.company.id}`" class="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline">
+              <i data-lucide="building-2" class="h-3.5 w-3.5"></i> <span x-text="job.company.name"></span>
+            </a>
+          </template>
+          <span class="inline-flex items-center gap-1" x-show="job.location">
+            <i data-lucide="map-pin" class="h-3.5 w-3.5 text-slate-400"></i> <span x-text="job.location"></span>
+          </span>
+          <span class="inline-flex items-center gap-1" x-show="job.deadline">
+            <i data-lucide="calendar" class="h-3.5 w-3.5 text-slate-400"></i> <span x-text="job.deadline"></span>
+          </span>
+          <a :href="job.url" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-slate-500 hover:text-brand-700">
+            <i data-lucide="external-link" class="h-3.5 w-3.5"></i> 원본 보기
+          </a>
+        </div>
+      </div>
+    </template>
+  </section>
+
+  <!-- 액션 + 본문 -->
+  <div class="grid gap-5 lg:grid-cols-[1fr_280px]">
+
+    <!-- 좌: 본문(JD) + AI 자소서 결과 -->
+    <div class="space-y-5">
+    <!-- 본문 (JD) -->
+    <section class="rounded-2xl bg-white p-6 shadow-sm">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <i data-lucide="file-text" class="h-4 w-4 text-brand-700"></i>
+          <h2 class="text-sm font-semibold text-slate-800">공고 본문 (JD)</h2>
+          <span class="text-[11px] text-slate-400"
+                x-text="job && job.jd_fetched_at ? `· 추출 ${new Date(job.jd_fetched_at).toLocaleString()}` : ''"></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" @click="fetchJd(true)" :disabled="jdBusy"
+                  class="inline-flex items-center gap-1 rounded-md border border-brand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-50">
+            <i x-show="!jdBusy" data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
+            <i x-show="jdBusy" data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin"></i>
+            <span x-text="job && job.jd_md ? '다시 가져오기' : '본문 가져오기'"></span>
+          </button>
+        </div>
+      </div>
+
+      <div x-show="jdBusy" class="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
+        <div class="flex items-center justify-between">
+          <span x-text="jdStage"></span>
+          <span class="font-semibold text-brand-700" x-text="jdPct + '%'"></span>
+        </div>
+        <div class="mt-1.5 h-1.5 rounded-full bg-slate-200">
+          <div class="h-1.5 rounded-full bg-brand-600 transition-all" :style="`width: ${jdPct}%`"></div>
+        </div>
+      </div>
+
+      <template x-if="!jdBusy && job && job.jd_error && !job.jd_md">
+        <div class="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <i data-lucide="alert-triangle" class="inline h-3.5 w-3.5"></i>
+          <span x-text="job.jd_error"></span>
+        </div>
+      </template>
+
+      <template x-if="!jdBusy && job && !job.jd_md && !job.jd_error">
+        <div class="mt-4 rounded-lg border-2 border-dashed border-slate-200 p-8 text-center text-sm">
+          <i data-lucide="file-search" class="mx-auto mb-2 h-7 w-7 text-slate-300"></i>
+          <div class="text-slate-500">아직 본문이 추출되지 않았습니다.</div>
+          <button type="button" @click="fetchJd(false)"
+                  class="mt-3 inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700">
+            <i data-lucide="download-cloud" class="h-3.5 w-3.5"></i> 지금 가져오기
+          </button>
+        </div>
+      </template>
+
+      <article class="jd-prose mt-4" x-show="job && job.jd_md" x-html="jdHtml"></article>
+    </section>
+
+    <!-- AI 자기소개서 결과 -->
+    <section x-show="job && job.cover_letter" class="rounded-2xl bg-white p-6 shadow-sm">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <i data-lucide="sparkles" class="h-4 w-4 text-amber-500"></i>
+          <h2 class="text-sm font-semibold text-slate-800">AI 자기소개서 초안</h2>
+          <span class="text-[11px] text-slate-400"
+                x-text="job && job.cover_letter_at ? `· ${new Date(job.cover_letter_at).toLocaleString()}` : ''"></span>
+        </div>
+        <button type="button" @click="copyAllCl()"
+                class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+          <i data-lucide="copy" class="h-3.5 w-3.5"></i> 전체 복사
+        </button>
+      </div>
+
+      <template x-if="job && job.cover_letter && job.cover_letter.highlight">
+        <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <i data-lucide="lightbulb" class="inline h-3.5 w-3.5"></i>
+          <span x-text="job.cover_letter.highlight"></span>
+        </div>
+      </template>
+
+      <div class="mt-4 space-y-4">
+        <template x-for="(item, idx) in (job && job.cover_letter ? (job.cover_letter.items || []) : [])" :key="idx">
+          <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-[13px] font-semibold text-brand-800" x-text="`${idx+1}. ${item.question}`"></h3>
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="text-[10.5px] text-slate-400" x-text="`${(item.answer||'').length}자`"></span>
+                <button type="button" @click="copyText(item.answer)"
+                        class="text-slate-400 hover:text-brand-700" title="복사">
+                  <i data-lucide="copy" class="h-3.5 w-3.5"></i>
+                </button>
+              </div>
+            </div>
+            <p class="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700" x-text="item.answer"></p>
+          </div>
+        </template>
+      </div>
+    </section>
+    </div>
+
+    <!-- 우: 사이드 (지원상태 + 자소서 생성) -->
+    <aside class="space-y-4">
+      <section class="rounded-2xl bg-white p-5 shadow-sm">
+        <h3 class="flex items-center gap-1.5 text-sm font-semibold text-brand-800">
+          <i data-lucide="flag" class="h-4 w-4"></i> 지원 상태
+        </h3>
+        <template x-if="job">
+          <select x-model="job.application_status" @change="updateStatus($event.target.value)"
+                  class="mt-3 w-full rounded-md border px-2.5 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-300"
+                  :class="statusColor(job.application_status)">
+            <option value="none">미지원</option>
+            <option value="interested">관심</option>
+            <option value="applied">지원함</option>
+            <option value="interview">면접</option>
+            <option value="passed">합격</option>
+            <option value="rejected">불합격</option>
+          </select>
+        </template>
+      </section>
+
+      <section class="rounded-2xl bg-white p-5 shadow-sm">
+        <h3 class="flex items-center gap-1.5 text-sm font-semibold text-brand-800">
+          <i data-lucide="sparkles" class="h-4 w-4 text-amber-500"></i> AI 자기소개서
+        </h3>
+        <p class="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+          내 이력서 + 회사 정보 + 공고를 묶어 맞춤 초안을 만듭니다.
+        </p>
+
+        <label class="mt-3 block text-[11px] font-medium text-slate-600">문항 (한 줄에 하나 · 비우면 기본 3개)</label>
+        <textarea x-model="clQuestions" rows="3"
+                  placeholder="지원 동기&#10;직무 적합성&#10;입사 후 포부"
+                  class="mt-1 w-full rounded-md border px-2 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-300"></textarea>
+
+        <label class="mt-2 block text-[11px] font-medium text-slate-600">문체</label>
+        <select x-model="clTone"
+                class="mt-1 w-full rounded-md border px-2 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-300">
+          <option value="정중">정중·격식</option>
+          <option value="간결">간결·명료</option>
+          <option value="열정">적극·열정</option>
+        </select>
+
+        <button type="button" @click="generateCoverLetter()" :disabled="clBusy"
+                class="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
+          <i x-show="!clBusy" data-lucide="wand-2" class="h-3.5 w-3.5"></i>
+          <i x-show="clBusy" data-lucide="loader-2" class="h-3.5 w-3.5 animate-spin"></i>
+          <span x-text="clBusy ? '생성 중...' : (job && job.cover_letter ? '다시 생성' : '자소서 생성')"></span>
+        </button>
+
+        <div x-show="clBusy" class="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-2.5 text-[11px] text-slate-500">
+          <div class="flex items-center justify-between">
+            <span x-text="clStage"></span>
+            <span class="font-semibold text-brand-700" x-text="clPct + '%'"></span>
+          </div>
+          <div class="mt-1.5 h-1.5 rounded-full bg-slate-200">
+            <div class="h-1.5 rounded-full bg-brand-600 transition-all" :style="`width: ${clPct}%`"></div>
+          </div>
+        </div>
+
+        <p x-show="!job || !job.jd_md" class="mt-2 text-[10.5px] text-amber-600">
+          ※ 공고 본문을 먼저 가져오면 더 정확해집니다.
+        </p>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+function jobDetailApp(jobId) {
+  return {
+    jobId,
+    job: null,
+    loading: true,
+    jdBusy: false,
+    jdStage: '',
+    jdPct: 0,
+    jdHtml: '',
+    clBusy: false,
+    clStage: '',
+    clPct: 0,
+    clQuestions: '',
+    clTone: '정중',
+
+    async init() {
+      await this.load();
+      // 본문이 아직 없고 에러도 없으면, 페이지 진입과 동시에 자동으로 가져오기 시작
+      if (this.job && !this.job.jd_md && !this.job.jd_error) {
+        this.fetchJd(false);
+      }
+    },
+
+    async load() {
+      this.loading = true;
+      try {
+        const r = await fetch(`/api/jobs/${this.jobId}`);
+        if (!r.ok) throw new Error(r.status);
+        this.job = await r.json();
+        this.renderJd();
+      } catch (e) {
+        window.toast && window.toast('error', `로드 실패: ${e.message}`);
+      } finally {
+        this.loading = false;
+        this.$nextTick(() => window.refreshLucide && window.refreshLucide());
+      }
+    },
+
+    renderJd() {
+      const md = (this.job && this.job.jd_md) || '';
+      if (!md) { this.jdHtml = ''; return; }
+      const raw = marked.parse(md, { gfm: true, breaks: true });
+      this.jdHtml = window.DOMPurify ? DOMPurify.sanitize(raw) : raw;
+    },
+
+    async fetchJd(force) {
+      if (this.jdBusy) return;
+      this.jdBusy = true; this.jdPct = 0; this.jdStage = '시작 중...';
+      try {
+        const r = await fetch(`/api/jobs/${this.jobId}/fetch-jd${force ? '?force=1' : ''}`, {method: 'POST'});
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        if (d.status === 'cached' && !force) {
+          // 이미 캐시 — 다시 로드
+          await this.load();
+          this.jdBusy = false;
+          return;
+        }
+        const taskId = d.task_id;
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${proto}://${location.host}/ws/progress/${taskId}`);
+        ws.onmessage = (msg) => {
+          try {
+            const e = JSON.parse(msg.data);
+            this.jdStage = e.message || e.stage;
+            this.jdPct = e.pct;
+            if (e.pct >= 100) {
+              ws.close();
+              setTimeout(() => this.load().then(() => { this.jdBusy = false; }), 300);
+            }
+          } catch (_) {}
+        };
+        ws.onclose = () => { if (this.jdBusy) { this.load().then(() => { this.jdBusy = false; }); } };
+      } catch (e) {
+        window.toast && window.toast('error', `본문 가져오기 실패: ${e.message}`);
+        this.jdBusy = false;
+      }
+    },
+
+    async updateStatus(next) {
+      try {
+        const r = await fetch(`/api/jobs/${this.jobId}/status`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({status: next}),
+        });
+        if (!r.ok) throw new Error(r.status);
+        window.toast && window.toast('success', `상태: ${this.statusLabel(next)}`);
+      } catch (e) {
+        window.toast && window.toast('error', `상태 변경 실패: ${e.message}`);
+      }
+    },
+
+    async generateCoverLetter() {
+      if (this.clBusy) return;
+      this.clBusy = true; this.clPct = 0; this.clStage = '준비 중...';
+      const questions = this.clQuestions.split('\n').map(s => s.trim()).filter(Boolean);
+      try {
+        const r = await fetch(`/api/jobs/${this.jobId}/cover-letter`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({questions, tone: this.clTone}),
+        });
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        const taskId = d.task_id;
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${proto}://${location.host}/ws/progress/${taskId}`);
+        ws.onmessage = (msg) => {
+          try {
+            const e = JSON.parse(msg.data);
+            this.clStage = e.message || e.stage;
+            this.clPct = e.pct;
+            if (e.pct >= 100) {
+              ws.close();
+              setTimeout(() => this.load().then(() => { this.clBusy = false; }), 300);
+            }
+          } catch (_) {}
+        };
+        ws.onclose = () => { if (this.clBusy) { this.load().then(() => { this.clBusy = false; }); } };
+      } catch (e) {
+        window.toast && window.toast('error', `자소서 생성 실패: ${e.message}`);
+        this.clBusy = false;
+      }
+    },
+
+    async copyText(t) {
+      try {
+        await navigator.clipboard.writeText(t || '');
+        window.toast && window.toast('success', '복사됨');
+      } catch (_) {
+        window.toast && window.toast('error', '복사 실패');
+      }
+    },
+    async copyAllCl() {
+      const cl = this.job && this.job.cover_letter;
+      if (!cl || !cl.items) return;
+      const text = cl.items.map(it => `[${it.question}]\n${it.answer}`).join('\n\n');
+      await this.copyText(text);
+    },
+
+    statusLabel(c) {
+      return ({none:'미지원',interested:'관심',applied:'지원함',interview:'면접',passed:'합격',rejected:'불합격'})[c] || c;
+    },
+    statusColor(c) {
+      return ({
+        none: 'bg-slate-100 text-slate-600 border-slate-200',
+        interested: 'bg-sky-100 text-sky-700 border-sky-200',
+        applied: 'bg-brand-100 text-brand-800 border-brand-300',
+        interview: 'bg-amber-100 text-amber-800 border-amber-300',
+        passed: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        rejected: 'bg-rose-100 text-rose-700 border-rose-200',
+      })[c] || 'bg-slate-100 text-slate-600 border-slate-200';
+    },
+    sourceBadge(s) {
+      return ({
+        saramin:  {cls:'bg-orange-100 text-orange-800', label:'사람인'},
+        jobkorea: {cls:'bg-sky-100 text-sky-800',       label:'잡코리아'},
+        wanted:   {cls:'bg-violet-100 text-violet-800', label:'원티드'},
+        manual:   {cls:'bg-slate-100 text-slate-700',   label:'수동'},
+        homepage: {cls:'bg-emerald-100 text-emerald-800', label:'홈페이지'},
+      })[s] || {cls:'bg-slate-100 text-slate-700', label: s || ''};
+    },
+  };
+}
+</script>
+{% endblock %}

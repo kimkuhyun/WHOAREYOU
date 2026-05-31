@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# 로컬 데이터 — API 키(UserSetting), 수집된 잡/회사/리뷰 등 민감 정보 포함
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# 환경 변수
+.env
+.env.local
+
+# 임시 dump
+dumps/
+*.log
+
+# IDE
+.vscode/
+.idea/

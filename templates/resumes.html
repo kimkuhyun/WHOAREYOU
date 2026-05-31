@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}이력서 목록 · WHOAREYOU{% endblock %}
+{% block header %}이력서{% endblock %}
+
+{% block content %}
+<div x-data="resumesApp()" x-init="load()" class="space-y-5">
+
+  {# ─── 상단: 안내 + 새 이력서 ─── #}
+  <section class="rounded-2xl bg-white p-5 shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="text-base font-semibold text-slate-800">내 이력서</h2>
+        <p class="mt-1 text-xs text-slate-500 leading-relaxed">
+          여러 개를 만들어 직무·회사별로 나눠 관리. <b>활성</b> 이력서가 매칭 분석에 사용됩니다.
+        </p>
+      </div>
+      <button type="button" @click="createNew" :disabled="creating"
+              class="inline-flex h-10 items-center gap-1.5 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50">
+        <i x-show="!creating" data-lucide="plus" class="h-4 w-4"></i>
+        <i x-show="creating" data-lucide="loader-2" class="h-4 w-4 animate-spin"></i>
+        <span>새 이력서</span>
+      </button>
+    </div>
+  </section>
+
+  {# ─── 카드 그리드 ─── #}
+  <div x-show="!loading && resumes.length === 0" class="rounded-2xl border-2 border-dashed border-slate-200 bg-white p-12 text-center">
+    <i data-lucide="file-plus" class="mx-auto mb-3 h-10 w-10 text-slate-300"></i>
+    <p class="text-sm text-slate-500">아직 이력서가 없습니다.</p>
+    <p class="mt-1 text-xs text-slate-400">"새 이력서" 버튼으로 만들어보세요.</p>
+  </div>
+
+  <div x-show="loading" class="text-center text-sm text-slate-400 py-8">불러오는 중...</div>
+
+  <div x-show="resumes.length > 0" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <template x-for="r in resumes" :key="r.id">
+      <article class="group flex flex-col gap-3 rounded-2xl border bg-white p-4 transition-all hover:shadow-md"
+               :class="r.is_primary ? 'border-brand-300 ring-1 ring-brand-200' : 'border-slate-200 hover:border-brand-200'">
+
+        {# 헤더 — 활성 배지 + title #}
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <h3 class="line-clamp-1 text-sm font-bold text-slate-800" x-text="r.title || '제목 없음'"></h3>
+            <p x-show="r.role" class="mt-0.5 line-clamp-1 text-xs text-slate-500" x-text="r.role"></p>
+          </div>
+          <span x-show="r.is_primary"
+                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-800">
+            <i data-lucide="check-circle-2" class="h-3 w-3"></i> 활성
+          </span>
+        </div>
+
+        {# 메타 #}
+        <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+          <span x-show="r.years_experience" class="inline-flex items-center gap-1">
+            <i data-lucide="briefcase" class="h-3 w-3"></i>
+            <span x-text="r.years_experience + '년'"></span>
+          </span>
+          <span class="inline-flex items-center gap-1" :title="r.updated_at">
+            <i data-lucide="clock" class="h-3 w-3"></i>
+            <span x-text="r.updated_at ? new Date(r.updated_at).toLocaleDateString() : '-'"></span>
+          </span>
+        </div>
+
+        {# 스킬 미리보기 (있으면) #}
+        <div x-show="r.skills_csv" class="flex flex-wrap gap-1">
+          <template x-for="skill in (r.skills_csv || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 5)" :key="skill">
+            <span class="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600" x-text="skill"></span>
+          </template>
+        </div>
+
+        {# 푸터 — 액션 버튼 (mt-auto로 카드 하단) #}
+        <div class="mt-auto space-y-1.5 pt-1">
+          <a :href="`/resume?id=${r.id}`"
+             class="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700">
+            <i data-lucide="edit-3" class="h-3.5 w-3.5"></i> 편집
+          </a>
+          <div class="flex items-center gap-1">
+            <button type="button" @click="activate(r)" :disabled="r.is_primary || busy[r.id]"
+                    class="inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors"
+                    :class="r.is_primary ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed' : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50'"
+                    title="이 이력서를 활성으로 (매칭 분석에 사용)">
+              <i data-lucide="zap" class="h-3 w-3"></i> <span x-text="r.is_primary ? '활성중' : '활성화'"></span>
+            </button>
+            <button type="button" @click="duplicate(r)" :disabled="busy[r.id]"
+                    class="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+                    title="복제 (별도 버전 만들기)">
+              <i data-lucide="copy" class="h-3 w-3"></i> 복제
+            </button>
+            <button type="button" @click="remove(r)" :disabled="busy[r.id]"
+                    class="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                    :title="r.is_primary ? '활성 이력서는 삭제 전 다른 이력서를 활성화하세요' : '삭제'">
+              <i data-lucide="trash-2" class="h-3 w-3"></i>
+            </button>
+          </div>
+        </div>
+      </article>
+    </template>
+  </div>
+
+</div>
+
+<script>
+function resumesApp() {
+  return {
+    resumes: [],
+    loading: true,
+    creating: false,
+    busy: {},   // {id: true/false}
+
+    async load() {
+      this.loading = true;
+      try {
+        const r = await fetch('/api/resumes');
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        this.resumes = d.items || [];
+      } catch (e) {
+        window.toast && window.toast('error', `목록 조회 실패: ${e.message}`);
+      } finally {
+        this.loading = false;
+        this.$nextTick(() => window.refreshLucide && window.refreshLucide());
+      }
+    },
+
+    async createNew() {
+      const result = await Swal.fire({
+        title: '새 이력서',
+        html: `
+          <div class="text-left space-y-2 text-sm">
+            <label class="block">
+              <span class="text-xs text-slate-600">이력서 이름</span>
+              <input id="rn-title" type="text" placeholder="예: 백엔드 개발자 지원용"
+                     class="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
+            </label>
+            <label class="block">
+              <span class="text-xs text-slate-600">희망 직무 (선택)</span>
+              <input id="rn-role" type="text" placeholder="예: 백엔드 / 프론트엔드"
+                     class="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
+            </label>
+            <label class="flex items-center gap-2 mt-2 cursor-pointer">
+              <input id="rn-activate" type="checkbox" class="rounded" />
+              <span class="text-xs text-slate-600">만들고 바로 활성화 (매칭 분석에 사용)</span>
+            </label>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '만들기',
+        cancelButtonText: '취소',
+        confirmButtonColor: '#059669',
+        focusConfirm: false,
+        preConfirm: () => ({
+          title: document.getElementById('rn-title').value.trim(),
+          role: document.getElementById('rn-role').value.trim(),
+          activate: document.getElementById('rn-activate').checked,
+        }),
+      });
+      if (!result.isConfirmed) return;
+      this.creating = true;
+      try {
+        const r = await fetch('/api/resumes', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(result.value),
+        });
+        if (!r.ok) throw new Error(r.status);
+        const created = await r.json();
+        window.toast && window.toast('success', `"${created.title}" 생성`);
+        await this.load();
+        // 생성 즉시 편집 페이지로
+        window.location.href = `/resume?id=${created.id}`;
+      } catch (e) {
+        Swal.fire({icon:'error', title:'생성 실패', text: e.message});
+      } finally {
+        this.creating = false;
+      }
+    },
+
+    async activate(r) {
+      if (r.is_primary) return;
+      this.busy = {...this.busy, [r.id]: true};
+      try {
+        const res = await fetch(`/api/resumes/${r.id}/activate`, {method: 'POST'});
+        if (!res.ok) throw new Error(res.status);
+        window.toast && window.toast('success', `"${r.title}" 활성화 — 매칭 분석에 사용됨`);
+        await this.load();
+      } catch (e) {
+        window.toast && window.toast('error', `활성화 실패: ${e.message}`);
+      } finally {
+        this.busy = {...this.busy, [r.id]: false};
+      }
+    },
+
+    async duplicate(r) {
+      this.busy = {...this.busy, [r.id]: true};
+      try {
+        const res = await fetch(`/api/resumes/${r.id}/duplicate`, {method: 'POST'});
+        if (!res.ok) throw new Error(res.status);
+        const dup = await res.json();
+        window.toast && window.toast('success', `복제됨: "${dup.title}"`);
+        await this.load();
+      } catch (e) {
+        window.toast && window.toast('error', `복제 실패: ${e.message}`);
+      } finally {
+        this.busy = {...this.busy, [r.id]: false};
+      }
+    },
+
+    async remove(r) {
+      if (r.is_primary) {
+        Swal.fire({
+          icon: 'warning',
+          title: '활성 이력서는 삭제할 수 없습니다',
+          text: '먼저 다른 이력서를 활성화한 뒤 삭제하세요.',
+        });
+        return;
+      }
+      const confirm = await Swal.fire({
+        icon: 'warning',
+        title: `"${r.title}" 삭제`,
+        text: '되돌릴 수 없습니다.',
+        showCancelButton: true,
+        confirmButtonText: '삭제',
+        cancelButtonText: '취소',
+        confirmButtonColor: '#dc2626',
+      });
+      if (!confirm.isConfirmed) return;
+      this.busy = {...this.busy, [r.id]: true};
+      try {
+        const res = await fetch(`/api/resume/${r.id}`, {method: 'DELETE'});
+        if (!res.ok) throw new Error(res.status);
+        window.toast && window.toast('success', '삭제 완료');
+        await this.load();
+      } catch (e) {
+        window.toast && window.toast('error', `삭제 실패: ${e.message}`);
+      } finally {
+        this.busy = {...this.busy, [r.id]: false};
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

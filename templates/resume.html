@@ -1,0 +1,1031 @@
+{% extends "base.html" %}
+
+{% block title %}이력서 · WHOAREYOU{% endblock %}
+{% block header %}이력서{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  .rs-page {
+    background: #fff; color: #1e293b;
+    max-width: 900px; margin: 0 auto;
+    padding: 44px 52px; font-size: 13.5px; line-height: 1.55;
+  }
+  .rs-h1 { font-size: 26px; font-weight: 800; color: #065f46; letter-spacing: -0.5px; line-height: 1.15; }
+  .rs-role { color: #475569; font-size: 14px; margin-top: 4px; }
+  .rs-section { margin-top: 32px; }
+  .rs-section-title {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 14px; font-weight: 700; color: #064e3b;
+    border-bottom: 2px solid #047857; padding-bottom: 6px; margin-bottom: 14px;
+  }
+  .rs-section-title .rs-title-left { display: flex; align-items: center; gap: 8px; }
+  .rs-section-title [data-lucide] { color: #059669; width: 16px; height: 16px; }
+  .rs-table { width: 100%; border-collapse: collapse; }
+  .rs-table th, .rs-table td {
+    border: 1px solid #e2e8f0; padding: 7px 9px;
+    text-align: left; vertical-align: top; font-size: 13px;
+  }
+  .rs-table th { background: #f0fdf4; color: #065f46; font-weight: 600; width: 110px; }
+  .rs-input {
+    width: 100%; border: 1px solid transparent; background: transparent;
+    padding: 4px 6px; border-radius: 4px; font-size: 13px; color: inherit;
+  }
+  .rs-input:hover { border-color: #e2e8f0; background: #f8fafc; }
+  .rs-input:focus { outline: none; border-color: #10b981; background: #ecfdf5; }
+  textarea.rs-input { min-height: 60px; resize: vertical; line-height: 1.5; font-family: inherit; }
+  .rs-btn-icon {
+    border: 1px solid #e2e8f0; background: #fff;
+    width: 26px; height: 26px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #475569; cursor: pointer;
+  }
+  .rs-btn-icon:hover { background: #fef2f2; color: #ef4444; border-color: #fecaca; }
+  .rs-add-btn {
+    margin-top: 6px;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 6px 10px; border: 1px dashed #94a3b8; border-radius: 6px;
+    color: #475569; font-size: 12px; background: transparent;
+  }
+  .rs-add-btn:hover { background: #f0fdf4; color: #047857; border-color: #10b981; }
+  .rs-photo {
+    width: 96px; height: 124px; border: 1px solid #cbd5e1; border-radius: 6px;
+    background: #f1f5f9; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; color: #94a3b8; text-align: center; font-size: 11px;
+  }
+  .rs-photo img { width: 100%; height: 100%; object-fit: cover; }
+  /* PDF 출력 시 input 보더 제거 */
+  .pdf-export .rs-input,
+  .pdf-export .rs-add-btn,
+  .pdf-export .rs-btn-icon { border-color: transparent !important; background: transparent !important; }
+  .pdf-export .rs-add-btn, .pdf-export .rs-btn-icon, .pdf-export .section-delete { display: none !important; }
+  @media print {
+    .rs-input { border-color: transparent !important; background: transparent !important; }
+  }
+</style>
+{% endblock %}
+
+{% block page_max_width %}max-w-7xl{% endblock %}
+
+{% block content %}
+<div x-data="resumeApp()" x-init="init()" class="space-y-4">
+
+  {# 상단 액션 바 #}
+  <div class="no-print flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white p-3 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="/resumes" class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 hover:text-brand-700 hover:bg-brand-50"
+         title="이력서 목록으로">
+        <i data-lucide="arrow-left" class="h-3.5 w-3.5"></i> 목록
+      </a>
+      <i data-lucide="file-user" class="h-5 w-5 text-brand-700"></i>
+      {# 이력서 이름 — inline 편집. 다중 이력서 구분에 중요 #}
+      <input type="text" x-model="form.title"
+             placeholder="이력서 이름 (예: 백엔드 지원용)"
+             class="min-w-[160px] rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-brand-800 hover:border-slate-200 focus:border-brand-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200" />
+      <span x-show="form.is_primary"
+            class="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-800">
+        <i data-lucide="check-circle-2" class="h-3 w-3"></i> 활성
+      </span>
+      <!-- 양식 템플릿 선택 -->
+      <div class="ml-2 flex items-center gap-1">
+        <span class="text-[11px] text-slate-400">양식</span>
+        <select x-model="sec.template" @change="applyTemplate(sec.template)"
+                class="rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none">
+          <option value="standard">표준 (사람인/잡코리아 호환)</option>
+          <option value="minimal">미니멀 (개발자/디자이너)</option>
+          <option value="full">전체 섹션</option>
+          <option value="custom">사용자 지정</option>
+        </select>
+      </div>
+      <span class="text-[11px] text-slate-400"
+            x-text="form.updated_at ? `· 업데이트 ${new Date(form.updated_at).toLocaleString()}` : '· 저장된 적 없음'"></span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" @click="addSectionDialog"
+              class="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-xs text-brand-700 hover:bg-brand-50">
+        <i data-lucide="plus-circle" class="h-3.5 w-3.5"></i> 섹션 추가
+      </button>
+      <button type="button" @click="loadResume"
+              class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
+        <i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i> 되돌리기
+      </button>
+      <button type="button" @click="downloadPdf" :disabled="exporting"
+              class="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-xs text-brand-700 hover:bg-brand-50 disabled:opacity-50">
+        <i data-lucide="file-down" class="h-3.5 w-3.5"></i>
+        <span x-text="exporting ? '생성 중...' : 'PDF 다운로드'"></span>
+      </button>
+      <button type="button" @click="downloadZip" :disabled="!attachments.length"
+              class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              :title="attachments.length ? '첨부 파일을 ZIP으로 다운로드 (PDF는 포함되지 않음)' : '첨부 파일이 없습니다'">
+        <i data-lucide="folder-archive" class="h-3.5 w-3.5"></i> 첨부 ZIP
+      </button>
+      <button type="button" onclick="window.print()"
+              class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
+        <i data-lucide="printer" class="h-3.5 w-3.5"></i> 인쇄
+      </button>
+      <button type="button" @click="save" :disabled="saving"
+              class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
+        <i data-lucide="save" class="h-3.5 w-3.5"></i>
+        <span x-text="saving ? '저장 중...' : '저장'"></span>
+      </button>
+    </div>
+  </div>
+
+  {# ─── PDF 이력서 빠른 업로드 안내 (이력서/첨부 없을 때만 — 첫 사용자 가이드) ─── #}
+  <div x-show="!attachments || attachments.length === 0" x-transition
+       class="no-print rounded-2xl border-2 border-dashed border-brand-300 bg-gradient-to-br from-brand-50 to-emerald-50/50 p-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-start gap-3">
+        <div class="rounded-lg bg-brand-100 p-2 text-brand-700">
+          <i data-lucide="file-up" class="h-5 w-5"></i>
+        </div>
+        <div>
+          <div class="text-sm font-semibold text-brand-900">이미 만든 PDF 이력서 있으세요?</div>
+          <div class="mt-0.5 text-xs text-brand-700/80 leading-relaxed">
+            올리시면 자동으로 텍스트가 추출돼 <b>잡 매칭에 활용</b>됩니다. 양식까지 안 채워도
+            매칭 점수가 계산돼요. (Word/PDF/Hwp 지원)
+          </div>
+        </div>
+      </div>
+      <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">
+        <i data-lucide="upload" class="h-4 w-4"></i>
+        <span>PDF/Word 업로드</span>
+        <input type="file" class="hidden"
+               accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.txt,.md,.html,.htm"
+               @change="uploadFile($event, 'resume')" />
+      </label>
+    </div>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-[1fr_320px]">
+
+    {# ─── 메인: 이력서 양식 ─── #}
+    <div id="resume-printable" class="rs-page rounded-2xl shadow-sm">
+
+      {# 헤더 (인적사항 요약 + 사진) #}
+      <header class="flex items-start justify-between gap-6 border-b-2 border-brand-700 pb-5">
+        <div class="flex-1">
+          <input type="text" x-model="sec.personal.name_kr" placeholder="홍길동" class="rs-input rs-h1" />
+          <input type="text" x-model="form.role" placeholder="희망 직무 (예: 백엔드 개발자)" class="rs-input rs-role" />
+          <div class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600">
+            <div class="flex items-center gap-2">
+              <i data-lucide="phone" class="h-3.5 w-3.5 text-brand-600 shrink-0"></i>
+              <input type="text" x-model="sec.personal.phone" placeholder="010-0000-0000" class="rs-input"/>
+            </div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="mail" class="h-3.5 w-3.5 text-brand-600 shrink-0"></i>
+              <input type="email" x-model="sec.personal.email" placeholder="example@email.com" class="rs-input"/>
+            </div>
+            <div class="flex items-center gap-2 col-span-2">
+              <i data-lucide="map-pin" class="h-3.5 w-3.5 text-brand-600 shrink-0"></i>
+              <input type="text" x-model="sec.personal.address" placeholder="주소" class="rs-input"/>
+            </div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="cake" class="h-3.5 w-3.5 text-brand-600 shrink-0"></i>
+              <input type="text" x-model="sec.personal.birth_date" placeholder="YYYY-MM-DD" class="rs-input"/>
+            </div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="user" class="h-3.5 w-3.5 text-brand-600 shrink-0"></i>
+              <select x-model="sec.personal.gender" class="rs-input">
+                <option value="">성별</option>
+                <option value="M">남</option>
+                <option value="F">여</option>
+                <option value="N">선택 안 함</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="shrink-0">
+          <div class="rs-photo">
+            <template x-if="photoUrl"><img :src="photoUrl" alt="증명사진" /></template>
+            <template x-if="!photoUrl">
+              <div class="flex flex-col items-center gap-1 p-2">
+                <i data-lucide="image" class="h-6 w-6"></i><div>증명사진</div>
+              </div>
+            </template>
+          </div>
+          <label class="no-print mt-2 inline-flex cursor-pointer items-center gap-1 rounded-md border border-brand-200 bg-white px-2 py-1 text-[11px] text-brand-700 hover:bg-brand-50">
+            <i data-lucide="upload" class="h-3 w-3"></i>
+            <span x-text="form.photo_file_id ? '교체' : '업로드'"></span>
+            <input type="file" class="hidden" accept="image/*" @change="uploadFile($event, 'photo')" />
+          </label>
+          <button type="button" @click="removePhoto" x-show="form.photo_file_id"
+                  class="no-print mt-1 block text-[11px] text-rose-500 hover:underline">사진 삭제</button>
+        </div>
+      </header>
+
+      {# ── 학력 ── #}
+      <section x-show="sec.visible.education" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="graduation-cap"></i> 학력사항</span>
+          <button type="button" @click="hideSection('education')" class="section-delete rs-btn-icon" title="이 섹션 숨김">
+            <i data-lucide="eye-off" class="h-3.5 w-3.5"></i>
+          </button>
+        </h3>
+        <table class="rs-table">
+          <thead><tr><th>재학기간</th><th>학교명</th><th>전공/학위</th><th>구분</th><th>학점</th><th class="section-delete" style="width:48px"></th></tr></thead>
+          <tbody>
+            <template x-for="(row, i) in sec.education" :key="'edu-'+i">
+              <tr>
+                <td style="width:200px">
+                  <div class="flex items-center gap-1">
+                    <input type="month" x-model="row.start_date" class="rs-input"/>
+                    <span class="text-slate-400">~</span>
+                    <input type="month" x-model="row.end_date" class="rs-input"/>
+                  </div>
+                </td>
+                <td><input type="text" x-model="row.school" placeholder="○○대학교" class="rs-input"/></td>
+                <td>
+                  <input type="text" x-model="row.major" placeholder="전공" class="rs-input"/>
+                  <input type="text" x-model="row.degree" placeholder="학사 / 석사 / 박사" class="rs-input"/>
+                </td>
+                <td style="width:110px">
+                  <select x-model="row.status" class="rs-input">
+                    <option value="">선택</option>
+                    <option value="graduated">졸업</option><option value="enrolled">재학</option>
+                    <option value="leave">휴학</option><option value="dropout">중퇴</option>
+                    <option value="expected">졸업예정</option><option value="completed">수료</option>
+                  </select>
+                </td>
+                <td style="width:110px">
+                  <div class="flex items-center gap-1">
+                    <input type="text" x-model="row.gpa" placeholder="3.5" class="rs-input"/>
+                    <span class="text-slate-400">/</span>
+                    <input type="text" x-model="row.gpa_max" placeholder="4.5" class="rs-input"/>
+                  </div>
+                </td>
+                <td class="section-delete">
+                  <button type="button" class="rs-btn-icon" @click="sec.education.splice(i,1)" title="삭제">
+                    <i data-lucide="trash-2" class="h-3.5 w-3.5"></i>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <button type="button" class="section-delete rs-add-btn" @click="addEducation">
+          <i data-lucide="plus" class="h-3 w-3"></i> 학력 추가
+        </button>
+      </section>
+
+      {# ── 경력 ── #}
+      <section x-show="sec.visible.experience" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="briefcase"></i> 경력사항</span>
+          <button type="button" @click="hideSection('experience')" class="section-delete rs-btn-icon" title="이 섹션 숨김">
+            <i data-lucide="eye-off" class="h-3.5 w-3.5"></i>
+          </button>
+        </h3>
+        <template x-for="(row, i) in sec.experience" :key="'exp-'+i">
+          <div class="mb-3 rounded-lg border border-slate-200 p-3">
+            <div class="grid gap-2 md:grid-cols-2">
+              <div>
+                <label class="text-[11px] text-slate-500">회사명</label>
+                <input type="text" x-model="row.company" placeholder="회사명" class="rs-input"/>
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-500">부서 / 직책</label>
+                <div class="flex gap-1">
+                  <input type="text" x-model="row.department" placeholder="부서" class="rs-input"/>
+                  <input type="text" x-model="row.position" placeholder="직책" class="rs-input"/>
+                </div>
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-500">재직기간</label>
+                <div class="flex items-center gap-1">
+                  <input type="month" x-model="row.start_date" class="rs-input"/>
+                  <span class="text-slate-400">~</span>
+                  <template x-if="!row.is_current"><input type="month" x-model="row.end_date" class="rs-input"/></template>
+                  <template x-if="row.is_current"><span class="rs-input text-brand-700 font-medium">재직 중</span></template>
+                </div>
+                <label class="section-delete mt-1 inline-flex items-center gap-1 text-[11px] text-slate-500">
+                  <input type="checkbox" x-model="row.is_current" class="rounded border-slate-300 text-brand-600"/>
+                  현재 재직 중
+                </label>
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-500">연봉 / 퇴사 사유</label>
+                <div class="flex gap-1">
+                  <input type="text" x-model="row.salary" placeholder="연봉(선택)" class="rs-input"/>
+                  <input type="text" x-model="row.leave_reason" placeholder="퇴사사유(선택)" class="rs-input"/>
+                </div>
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-[11px] text-slate-500">담당 업무</label>
+                <textarea x-model="row.duties" rows="3"
+                          placeholder="· 담당했던 업무를 구체적으로 기재&#10;· 성과는 수치로 표현" class="rs-input"></textarea>
+              </div>
+            </div>
+            <div class="section-delete mt-2 flex justify-end">
+              <button type="button" class="rs-btn-icon" @click="sec.experience.splice(i,1)" title="이 경력 삭제">
+                <i data-lucide="trash-2" class="h-3.5 w-3.5"></i>
+              </button>
+            </div>
+          </div>
+        </template>
+        <button type="button" class="section-delete rs-add-btn" @click="addExperience">
+          <i data-lucide="plus" class="h-3 w-3"></i> 경력 추가
+        </button>
+      </section>
+
+      {# ── 자격증 + 어학 ── #}
+      <section class="rs-section" x-show="sec.visible.certifications || sec.visible.languages">
+        <div class="grid gap-4 md:grid-cols-2">
+          <div x-show="sec.visible.certifications">
+            <h3 class="rs-section-title">
+              <span class="rs-title-left"><i data-lucide="award"></i> 자격증</span>
+              <button type="button" @click="hideSection('certifications')" class="section-delete rs-btn-icon" title="숨김">
+                <i data-lucide="eye-off" class="h-3 w-3"></i>
+              </button>
+            </h3>
+            <table class="rs-table">
+              <thead><tr><th>자격명</th><th style="width:110px">발급기관</th><th style="width:100px">취득일</th><th class="section-delete" style="width:40px"></th></tr></thead>
+              <tbody>
+                <template x-for="(row, i) in sec.certifications" :key="'cert-'+i">
+                  <tr>
+                    <td><input type="text" x-model="row.name" placeholder="자격명" class="rs-input"/></td>
+                    <td><input type="text" x-model="row.issuer" placeholder="발급기관" class="rs-input"/></td>
+                    <td><input type="month" x-model="row.acquired_date" class="rs-input"/></td>
+                    <td class="section-delete">
+                      <button type="button" class="rs-btn-icon" @click="sec.certifications.splice(i,1)"><i data-lucide="trash-2" class="h-3 w-3"></i></button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <button type="button" class="section-delete rs-add-btn" @click="sec.certifications.push({name:'',issuer:'',acquired_date:''})">
+              <i data-lucide="plus" class="h-3 w-3"></i> 추가
+            </button>
+          </div>
+          <div x-show="sec.visible.languages">
+            <h3 class="rs-section-title">
+              <span class="rs-title-left"><i data-lucide="languages"></i> 어학</span>
+              <button type="button" @click="hideSection('languages')" class="section-delete rs-btn-icon" title="숨김">
+                <i data-lucide="eye-off" class="h-3 w-3"></i>
+              </button>
+            </h3>
+            <table class="rs-table">
+              <thead><tr><th style="width:80px">언어</th><th>시험명</th><th style="width:80px">점수</th><th style="width:100px">취득일</th><th class="section-delete" style="width:40px"></th></tr></thead>
+              <tbody>
+                <template x-for="(row, i) in sec.languages" :key="'lang-'+i">
+                  <tr>
+                    <td><input type="text" x-model="row.language" placeholder="영어" class="rs-input"/></td>
+                    <td><input type="text" x-model="row.test" placeholder="TOEIC 등" class="rs-input"/></td>
+                    <td><input type="text" x-model="row.score" placeholder="900" class="rs-input"/></td>
+                    <td><input type="month" x-model="row.acquired_date" class="rs-input"/></td>
+                    <td class="section-delete">
+                      <button type="button" class="rs-btn-icon" @click="sec.languages.splice(i,1)"><i data-lucide="trash-2" class="h-3 w-3"></i></button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <button type="button" class="section-delete rs-add-btn" @click="sec.languages.push({language:'',test:'',score:'',acquired_date:''})">
+              <i data-lucide="plus" class="h-3 w-3"></i> 추가
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {# ── 수상 ── #}
+      <section x-show="sec.visible.awards" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="trophy"></i> 수상</span>
+          <button type="button" @click="hideSection('awards')" class="section-delete rs-btn-icon"><i data-lucide="eye-off" class="h-3.5 w-3.5"></i></button>
+        </h3>
+        <table class="rs-table">
+          <thead><tr><th style="width:200px">수상명</th><th style="width:160px">수여기관</th><th style="width:110px">수상일</th><th>설명</th><th class="section-delete" style="width:40px"></th></tr></thead>
+          <tbody>
+            <template x-for="(row, i) in sec.awards" :key="'aw-'+i">
+              <tr>
+                <td><input type="text" x-model="row.name" placeholder="수상명" class="rs-input"/></td>
+                <td><input type="text" x-model="row.issuer" placeholder="수여기관" class="rs-input"/></td>
+                <td><input type="month" x-model="row.awarded_date" class="rs-input"/></td>
+                <td><input type="text" x-model="row.description" placeholder="간단한 설명" class="rs-input"/></td>
+                <td class="section-delete"><button type="button" class="rs-btn-icon" @click="sec.awards.splice(i,1)"><i data-lucide="trash-2" class="h-3 w-3"></i></button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <button type="button" class="section-delete rs-add-btn" @click="sec.awards.push({name:'',issuer:'',awarded_date:'',description:''})">
+          <i data-lucide="plus" class="h-3 w-3"></i> 추가
+        </button>
+      </section>
+
+      {# ── 외부활동 ── #}
+      <section x-show="sec.visible.activities" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="users"></i> 외부활동 / 동아리</span>
+          <button type="button" @click="hideSection('activities')" class="section-delete rs-btn-icon"><i data-lucide="eye-off" class="h-3.5 w-3.5"></i></button>
+        </h3>
+        <table class="rs-table">
+          <thead><tr><th>활동명</th><th>역할</th><th style="width:200px">기간</th><th>설명</th><th class="section-delete" style="width:40px"></th></tr></thead>
+          <tbody>
+            <template x-for="(row, i) in sec.activities" :key="'act-'+i">
+              <tr>
+                <td><input type="text" x-model="row.title" placeholder="활동명" class="rs-input"/></td>
+                <td><input type="text" x-model="row.role" placeholder="역할" class="rs-input"/></td>
+                <td>
+                  <div class="flex items-center gap-1">
+                    <input type="month" x-model="row.start_date" class="rs-input"/>
+                    <span class="text-slate-400">~</span>
+                    <input type="month" x-model="row.end_date" class="rs-input"/>
+                  </div>
+                </td>
+                <td><input type="text" x-model="row.description" placeholder="설명" class="rs-input"/></td>
+                <td class="section-delete"><button type="button" class="rs-btn-icon" @click="sec.activities.splice(i,1)"><i data-lucide="trash-2" class="h-3 w-3"></i></button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <button type="button" class="section-delete rs-add-btn" @click="sec.activities.push({title:'',role:'',start_date:'',end_date:'',description:''})">
+          <i data-lucide="plus" class="h-3 w-3"></i> 추가
+        </button>
+      </section>
+
+      {# ── 봉사활동 ── #}
+      <section x-show="sec.visible.volunteers" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="heart-handshake"></i> 봉사활동</span>
+          <button type="button" @click="hideSection('volunteers')" class="section-delete rs-btn-icon"><i data-lucide="eye-off" class="h-3.5 w-3.5"></i></button>
+        </h3>
+        <table class="rs-table">
+          <thead><tr><th>활동명</th><th>기관</th><th style="width:90px">시간</th><th style="width:110px">날짜</th><th class="section-delete" style="width:40px"></th></tr></thead>
+          <tbody>
+            <template x-for="(row, i) in sec.volunteers" :key="'vol-'+i">
+              <tr>
+                <td><input type="text" x-model="row.title" placeholder="활동명" class="rs-input"/></td>
+                <td><input type="text" x-model="row.org" placeholder="기관" class="rs-input"/></td>
+                <td><input type="text" x-model="row.hours" placeholder="시간" class="rs-input"/></td>
+                <td><input type="month" x-model="row.date" class="rs-input"/></td>
+                <td class="section-delete"><button type="button" class="rs-btn-icon" @click="sec.volunteers.splice(i,1)"><i data-lucide="trash-2" class="h-3 w-3"></i></button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <button type="button" class="section-delete rs-add-btn" @click="sec.volunteers.push({title:'',org:'',hours:'',date:''})">
+          <i data-lucide="plus" class="h-3 w-3"></i> 추가
+        </button>
+      </section>
+
+      {# ── 논문/저서 ── #}
+      <section x-show="sec.visible.publications" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="book-open-text"></i> 논문 / 저서</span>
+          <button type="button" @click="hideSection('publications')" class="section-delete rs-btn-icon"><i data-lucide="eye-off" class="h-3.5 w-3.5"></i></button>
+        </h3>
+        <table class="rs-table">
+          <thead><tr><th>제목</th><th>학술지/출판사</th><th style="width:110px">발행일</th><th>링크</th><th class="section-delete" style="width:40px"></th></tr></thead>
+          <tbody>
+            <template x-for="(row, i) in sec.publications" :key="'pub-'+i">
+              <tr>
+                <td><input type="text" x-model="row.title" placeholder="제목" class="rs-input"/></td>
+                <td><input type="text" x-model="row.journal" placeholder="학술지/출판사" class="rs-input"/></td>
+                <td><input type="month" x-model="row.date" class="rs-input"/></td>
+                <td><input type="url" x-model="row.link" placeholder="https://..." class="rs-input"/></td>
+                <td class="section-delete"><button type="button" class="rs-btn-icon" @click="sec.publications.splice(i,1)"><i data-lucide="trash-2" class="h-3 w-3"></i></button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <button type="button" class="section-delete rs-add-btn" @click="sec.publications.push({title:'',journal:'',date:'',link:''})">
+          <i data-lucide="plus" class="h-3 w-3"></i> 추가
+        </button>
+      </section>
+
+      {# ── 특허 ── #}
+      <section x-show="sec.visible.patents" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="badge-check"></i> 특허 / 지적재산권</span>
+          <button type="button" @click="hideSection('patents')" class="section-delete rs-btn-icon"><i data-lucide="eye-off" class="h-3.5 w-3.5"></i></button>
+        </h3>
+        <table class="rs-table">
+          <thead><tr><th>특허명</th><th style="width:160px">등록번호</th><th style="width:110px">등록일</th><th>역할</th><th class="section-delete" style="width:40px"></th></tr></thead>
+          <tbody>
+            <template x-for="(row, i) in sec.patents" :key="'pat-'+i">
+              <tr>
+                <td><input type="text" x-model="row.title" placeholder="특허명" class="rs-input"/></td>
+                <td><input type="text" x-model="row.number" placeholder="등록번호" class="rs-input"/></td>
+                <td><input type="month" x-model="row.date" class="rs-input"/></td>
+                <td><input type="text" x-model="row.role" placeholder="역할" class="rs-input"/></td>
+                <td class="section-delete"><button type="button" class="rs-btn-icon" @click="sec.patents.splice(i,1)"><i data-lucide="trash-2" class="h-3 w-3"></i></button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <button type="button" class="section-delete rs-add-btn" @click="sec.patents.push({title:'',number:'',date:'',role:''})">
+          <i data-lucide="plus" class="h-3 w-3"></i> 추가
+        </button>
+      </section>
+
+      {# ── 보유 스킬 ── #}
+      <section class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="wrench"></i> 보유 스킬 / 기술</span>
+        </h3>
+        <input type="text" x-model="form.skills_csv" placeholder="콤마로 구분 (예: Python, FastAPI, PostgreSQL, Docker)" class="rs-input" />
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          <template x-for="s in (form.skills_csv || '').split(',').map(x => x.trim()).filter(Boolean)" :key="s">
+            <span class="rounded-full bg-brand-50 px-2.5 py-0.5 text-[12px] font-medium text-brand-700 border border-brand-200" x-text="s"></span>
+          </template>
+        </div>
+      </section>
+
+      {# ── 자기소개서 ── #}
+      <section x-show="sec.visible.self_intros" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="pen-line"></i> 자기소개서</span>
+          <button type="button" @click="hideSection('self_intros')" class="section-delete rs-btn-icon"><i data-lucide="eye-off" class="h-3.5 w-3.5"></i></button>
+        </h3>
+        <template x-for="(row, i) in sec.self_intros" :key="'si-'+i">
+          <div class="mb-4">
+            <div class="flex items-center gap-2">
+              <input type="text" x-model="row.title" placeholder="항목 제목 (예: 지원동기 및 입사후 포부)" class="rs-input font-semibold text-brand-800"/>
+              <button type="button" class="section-delete rs-btn-icon" @click="sec.self_intros.splice(i,1)"><i data-lucide="trash-2" class="h-3.5 w-3.5"></i></button>
+            </div>
+            <textarea x-model="row.content" rows="5" placeholder="내용을 입력하세요..." class="rs-input mt-1"></textarea>
+          </div>
+        </template>
+        <button type="button" class="section-delete rs-add-btn" @click="sec.self_intros.push({title:'',content:''})">
+          <i data-lucide="plus" class="h-3 w-3"></i> 자기소개 항목 추가
+        </button>
+      </section>
+
+      {# ── 사용자 정의 섹션들 ── #}
+      <template x-for="(row, i) in sec.custom" :key="'custom-'+i">
+        <section class="rs-section">
+          <h3 class="rs-section-title">
+            <span class="rs-title-left">
+              <i data-lucide="square-pen"></i>
+              <input type="text" x-model="row.title" placeholder="섹션 제목" class="rs-input font-bold"/>
+            </span>
+            <button type="button" @click="sec.custom.splice(i,1)" class="section-delete rs-btn-icon" title="섹션 삭제">
+              <i data-lucide="trash-2" class="h-3.5 w-3.5"></i>
+            </button>
+          </h3>
+          <textarea x-model="row.content" rows="5" placeholder="내용을 자유롭게 입력하세요" class="rs-input"></textarea>
+        </section>
+      </template>
+
+      {# ── 희망 근무조건 ── #}
+      <section x-show="sec.visible.preferences" class="rs-section">
+        <h3 class="rs-section-title">
+          <span class="rs-title-left"><i data-lucide="target"></i> 희망 근무조건</span>
+          <button type="button" @click="hideSection('preferences')" class="section-delete rs-btn-icon"><i data-lucide="eye-off" class="h-3.5 w-3.5"></i></button>
+        </h3>
+        <table class="rs-table">
+          <tbody>
+            <tr><th>희망 직무</th><td><input type="text" x-model="sec.preferences.desired_role" class="rs-input"/></td>
+                <th>희망 연봉</th><td><input type="text" x-model="sec.preferences.desired_salary" placeholder="회사 내규 / 4,000만원~" class="rs-input"/></td></tr>
+            <tr><th>희망 근무지</th><td><input type="text" x-model="sec.preferences.desired_location" class="rs-input"/></td>
+                <th>근무 형태</th><td>
+                  <select x-model="sec.preferences.work_type" class="rs-input">
+                    <option value="">선택</option>
+                    <option value="fulltime">정규직</option><option value="contract">계약직</option>
+                    <option value="intern">인턴</option><option value="parttime">파트타임</option>
+                    <option value="freelance">프리랜서</option>
+                  </select>
+                </td></tr>
+            <tr><th>입사 가능</th><td colspan="3"><input type="text" x-model="sec.preferences.start_available" placeholder="예: 즉시 / 2026-01" class="rs-input"/></td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    {# ─── 우측 사이드: 첨부 관리 (안내+업로드+목록 통합) + 진행 요약 ─── #}
+    <aside class="no-print space-y-4">
+
+      <!-- 첨부 관리 (안내 + 업로드 + 목록 통합) -->
+      <section class="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 class="flex items-center gap-1.5 text-sm font-semibold text-brand-800">
+          <i data-lucide="paperclip" class="h-4 w-4"></i> 첨부 관리
+        </h3>
+        <p class="mt-1 text-[11px] leading-relaxed text-slate-500">
+          이력서 양식과 <b>별개</b>로 보관 — PDF 다운로드에 포함 안 됨.
+          매칭 분석엔 자동으로 활용됩니다. ZIP 일괄 다운로드 가능.
+        </p>
+        <label class="mt-2 inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-brand-300 bg-brand-50/50 px-3 py-2.5 text-xs font-medium text-brand-700 hover:bg-brand-50">
+          <i data-lucide="upload-cloud" class="h-4 w-4"></i>
+          <span>파일 추가 (PDF/Word/PPT)</span>
+          <input type="file" class="hidden"
+                 accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.txt,.md,.html,.htm,.zip"
+                 @change="uploadFile($event, attachKind)" />
+        </label>
+        <div class="mt-2 flex gap-2">
+          <label class="inline-flex items-center gap-1 text-[11px] text-slate-600">
+            <input type="radio" name="atkind" value="resume" x-model="attachKind" class="text-brand-600"/> 이력서 원본
+          </label>
+          <label class="inline-flex items-center gap-1 text-[11px] text-slate-600">
+            <input type="radio" name="atkind" value="portfolio" x-model="attachKind" class="text-brand-600"/> 포트폴리오
+          </label>
+          <label class="inline-flex items-center gap-1 text-[11px] text-slate-600">
+            <input type="radio" name="atkind" value="attachment" x-model="attachKind" class="text-brand-600"/> 기타
+          </label>
+        </div>
+        <span x-show="uploading" class="mt-1 block text-[11px] text-slate-500">
+          업로드 중 <span x-text="uploadPct + '%'"></span>
+        </span>
+
+        <ul class="mt-3 space-y-1.5">
+          <template x-for="f in attachments" :key="f.id">
+            <li class="rounded-md border border-slate-200 px-2.5 py-2">
+              <div class="flex items-center justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1">
+                    <i :data-lucide="fileIcon(f.kind)" class="h-3.5 w-3.5 text-brand-600"></i>
+                    <span class="line-clamp-1 text-xs font-medium text-slate-800" x-text="f.original_name"></span>
+                  </div>
+                  <div class="text-[10px] text-slate-400">
+                    <span x-text="f.size_kb + 'KB'"></span> ·
+                    <span x-text="kindLabel(f.kind)"></span>
+                  </div>
+                </div>
+                <div class="flex gap-0.5">
+                  <a :href="f.download_url" title="다운로드" class="rs-btn-icon">
+                    <i data-lucide="download" class="h-3 w-3"></i>
+                  </a>
+                  <button type="button" @click="deleteFile(f.id)" title="삭제" class="rs-btn-icon">
+                    <i data-lucide="trash-2" class="h-3 w-3"></i>
+                  </button>
+                </div>
+              </div>
+            </li>
+          </template>
+          <template x-if="attachments.length === 0">
+            <li class="rounded-md border border-dashed border-slate-200 p-3 text-center text-[11px] text-slate-400">
+              첨부 파일 없음
+            </li>
+          </template>
+        </ul>
+        <template x-if="attachments.length > 0">
+          <button type="button" @click="downloadZip"
+                  class="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800">
+            <i data-lucide="folder-archive" class="h-3.5 w-3.5"></i>
+            첨부 ZIP 다운로드 (<span x-text="attachments.length"></span>개)
+          </button>
+        </template>
+      </section>
+
+      <section class="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 class="flex items-center gap-1.5 text-sm font-semibold text-brand-800">
+          <i data-lucide="activity" class="h-4 w-4"></i> 지원 진행 요약
+        </h3>
+        <ul class="mt-2 space-y-1 text-xs">
+          {% for code, label in [('interested','관심'),('applied','지원함'),('interview','면접'),('passed','합격'),('rejected','불합격')] %}
+            <li class="flex items-center justify-between">
+              <span class="text-slate-600">{{ label }}</span>
+              <span class="font-semibold text-brand-700" x-text="(apps.by_status && apps.by_status['{{ code }}']) || 0"></span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+// 양식 템플릿: visible 섹션 ID 목록
+// 사람인/잡코리아 양식이 사실상 동일 (activities 1개 차이만) → "표준" 하나로 통합 (activities 포함)
+const RESUME_TEMPLATES = {
+  standard: ['education','experience','certifications','languages','awards','activities','self_intros','preferences'],
+  minimal: ['experience','self_intros'],
+  full: ['education','experience','certifications','languages','awards','activities','volunteers','publications','patents','self_intros','preferences'],
+  // 하위 호환 — 기존 데이터에 saramin/jobkorea가 저장되어 있을 경우 표준으로 자동 매핑
+  saramin: ['education','experience','certifications','languages','awards','activities','self_intros','preferences'],
+  jobkorea: ['education','experience','certifications','languages','awards','activities','self_intros','preferences'],
+};
+
+const SECTION_LABELS = {
+  education: '학력사항', experience: '경력사항',
+  certifications: '자격증', languages: '어학', awards: '수상',
+  activities: '외부활동/동아리', volunteers: '봉사활동',
+  publications: '논문/저서', patents: '특허/지적재산권',
+  self_intros: '자기소개서', preferences: '희망 근무조건',
+};
+
+function resumeApp() {
+  return {
+    form: {
+      id: null, title: '기본 이력서', role: '', summary_md: '', content_md: '',
+      skills_csv: '', years_experience: null, photo_file_id: null,
+      sections: null, is_primary: true, created_at: null, updated_at: null,
+    },
+    sec: {
+      personal: { name_kr:'', name_en:'', birth_date:'', gender:'', phone:'', email:'', address:'', road_address:'' },
+      education: [], experience: [],
+      certifications: [], languages: [], awards: [],
+      activities: [], volunteers: [], publications: [], patents: [],
+      self_intros: [], custom: [],
+      preferences: { desired_role:'', desired_salary:'', desired_location:'', start_available:'', work_type:'' },
+      visible: {
+        personal: true, education: true, experience: true,
+        certifications: true, languages: true, awards: true,
+        activities: false, volunteers: false, publications: false, patents: false,
+        self_intros: true, preferences: true,
+      },
+      template: 'saramin',
+    },
+    saving: false, exporting: false,
+    apps: { items: [], by_status: {} },
+    attachments: [],
+    uploading: false, uploadPct: 0,
+    attachKind: 'resume',
+    photoUrl: '',
+    resumeId: null,  // URL ?id= — null이면 활성(primary) 이력서
+
+    async init() {
+      // URL ?id=N 처리 — 다중 이력서 편집
+      const params = new URLSearchParams(location.search);
+      const idStr = params.get('id');
+      if (idStr) {
+        const n = parseInt(idStr, 10);
+        if (!isNaN(n) && n > 0) this.resumeId = n;
+      }
+      await this.loadResume();
+      await Promise.all([this.loadApps(), this.loadFiles()]);
+    },
+
+    async loadResume() {
+      try {
+        const url = this.resumeId ? `/api/resumes/${this.resumeId}` : '/api/resume';
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        this.form = d;
+        if (d.sections) {
+          this.sec = {
+            ...this.sec,
+            personal: { ...this.sec.personal, ...(d.sections.personal || {}) },
+            education: d.sections.education || [],
+            experience: d.sections.experience || [],
+            certifications: d.sections.certifications || [],
+            languages: d.sections.languages || [],
+            awards: d.sections.awards || [],
+            activities: d.sections.activities || [],
+            volunteers: d.sections.volunteers || [],
+            publications: d.sections.publications || [],
+            patents: d.sections.patents || [],
+            self_intros: d.sections.self_intros || [],
+            custom: d.sections.custom || [],
+            preferences: { ...this.sec.preferences, ...(d.sections.preferences || {}) },
+            visible: { ...this.sec.visible, ...(d.sections.visible || {}) },
+            template: d.sections.template || 'saramin',
+          };
+        }
+        this.refreshPhoto();
+        this.$nextTick(() => window.refreshLucide && window.refreshLucide());
+      } catch (e) {
+        window.toast && window.toast('error', `이력서 로드 실패: ${e.message}`);
+      }
+    },
+
+    refreshPhoto() {
+      this.photoUrl = this.form.photo_file_id
+        ? `/api/resume/files/${this.form.photo_file_id}/raw?ts=${Date.now()}`
+        : '';
+    },
+
+    async loadApps() {
+      try {
+        const r = await fetch('/api/dashboard/applications');
+        if (!r.ok) return;
+        this.apps = await r.json();
+      } catch (_) {}
+    },
+
+    async loadFiles() {
+      try {
+        const r = await fetch('/api/resume/files');
+        if (!r.ok) return;
+        const d = await r.json();
+        const items = d.items || [];
+        this.attachments = items.filter(i => i.kind !== 'photo');
+        this.$nextTick(() => window.refreshLucide && window.refreshLucide());
+      } catch (_) {}
+    },
+
+    async save() {
+      this.saving = true;
+      try {
+        // 다중 이력서: ?id= 있으면 그 이력서, 없으면 활성(primary)
+        const url = this.resumeId ? `/api/resumes/${this.resumeId}` : '/api/resume';
+        const r = await fetch(url, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            // title은 사용자가 명시한 form.title 우선 (다중 이력서 구분에 중요)
+            title: this.form.title || (this.sec.personal.name_kr ? `${this.sec.personal.name_kr}의 이력서` : '기본 이력서'),
+            role: this.form.role,
+            summary_md: this.form.summary_md,
+            content_md: this.form.content_md,
+            skills_csv: this.form.skills_csv,
+            years_experience: this.form.years_experience,
+            photo_file_id: this.form.photo_file_id,
+            sections: this.sec,
+          }),
+        });
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        this.form.updated_at = d.updated_at;
+        window.toast && window.toast('success', '이력서 저장 완료');
+      } catch (e) {
+        window.toast && window.toast('error', `저장 실패: ${e.message}`);
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    addEducation() {
+      this.sec.education.push({ school:'', major:'', degree:'', start_date:'', end_date:'', status:'', gpa:'', gpa_max:'', location:'' });
+    },
+    addExperience() {
+      this.sec.experience.push({ company:'', department:'', position:'', start_date:'', end_date:'', is_current:false, duties:'', salary:'', leave_reason:'' });
+    },
+
+    // 양식 템플릿 적용
+    applyTemplate(name) {
+      const visible = RESUME_TEMPLATES[name];
+      if (!visible) return;
+      const next = { personal: true };
+      Object.keys(this.sec.visible).forEach(k => { next[k] = visible.includes(k); });
+      next.personal = true;
+      this.sec.visible = next;
+      this.sec.template = name;
+      window.toast && window.toast('success', `"${name}" 양식 적용 — 저장 버튼을 눌러야 영구 반영됩니다`);
+      this.$nextTick(() => window.refreshLucide && window.refreshLucide());
+    },
+
+    // 섹션 숨기기 (데이터는 보존)
+    hideSection(key) {
+      this.sec.visible[key] = false;
+      this.sec.template = 'custom';
+      window.toast && window.toast('info', `"${SECTION_LABELS[key] || key}" 섹션 숨김`);
+    },
+
+    // 섹션 추가 다이얼로그 — 숨겨진 표준 섹션 활성화 또는 사용자 정의 섹션 생성
+    async addSectionDialog() {
+      const hiddenStandard = Object.entries(this.sec.visible)
+        .filter(([k, v]) => !v && k !== 'personal')
+        .map(([k]) => k);
+
+      const options = {};
+      hiddenStandard.forEach(k => { options[`std:${k}`] = SECTION_LABELS[k] || k; });
+      options['custom'] = '✏ 사용자 정의 섹션 (제목 자유 입력)';
+
+      const { value, isConfirmed } = await Swal.fire({
+        title: '섹션 추가',
+        input: 'select',
+        inputOptions: options,
+        inputPlaceholder: '추가할 섹션을 선택하세요',
+        showCancelButton: true,
+        confirmButtonText: '추가',
+        cancelButtonText: '취소',
+        confirmButtonColor: '#16a34a',
+      });
+      if (!isConfirmed || !value) return;
+
+      if (value === 'custom') {
+        const { value: title } = await Swal.fire({
+          title: '사용자 정의 섹션 제목',
+          input: 'text',
+          inputPlaceholder: '예: 출간/번역, 발표 이력, 오픈소스 기여 등',
+          showCancelButton: true,
+          confirmButtonText: '추가',
+          cancelButtonText: '취소',
+          confirmButtonColor: '#16a34a',
+        });
+        if (!title) return;
+        this.sec.custom.push({ title: title.trim(), content: '' });
+      } else if (value.startsWith('std:')) {
+        const key = value.slice(4);
+        this.sec.visible[key] = true;
+        // 비어있으면 첫 행 자동 추가
+        const cmd = {
+          education: () => this.addEducation(),
+          experience: () => this.addExperience(),
+          certifications: () => this.sec.certifications.push({name:'',issuer:'',acquired_date:''}),
+          languages: () => this.sec.languages.push({language:'',test:'',score:'',acquired_date:''}),
+          awards: () => this.sec.awards.push({name:'',issuer:'',awarded_date:'',description:''}),
+          activities: () => this.sec.activities.push({title:'',role:'',start_date:'',end_date:'',description:''}),
+          volunteers: () => this.sec.volunteers.push({title:'',org:'',hours:'',date:''}),
+          publications: () => this.sec.publications.push({title:'',journal:'',date:'',link:''}),
+          patents: () => this.sec.patents.push({title:'',number:'',date:'',role:''}),
+          self_intros: () => this.sec.self_intros.push({title:'',content:''}),
+        }[key];
+        if (cmd && (this.sec[key] || []).length === 0) cmd();
+      }
+      this.sec.template = 'custom';
+      this.$nextTick(() => window.refreshLucide && window.refreshLucide());
+    },
+
+    fileIcon(kind) {
+      return ({ resume: 'file-text', portfolio: 'folder', attachment: 'paperclip' })[kind] || 'file';
+    },
+    kindLabel(kind) {
+      return ({ resume: '이력서 원본', portfolio: '포트폴리오', attachment: '기타' })[kind] || kind;
+    },
+
+    async uploadFile(ev, kind) {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      this.uploading = true; this.uploadPct = 0;
+      const fd = new FormData();
+      fd.append('file', f);
+      fd.append('kind', kind);
+      try {
+        const xhr = new XMLHttpRequest();
+        const done = new Promise((resolve, reject) => {
+          xhr.open('POST', '/api/resume/files');
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) this.uploadPct = Math.round((e.loaded / e.total) * 100);
+          };
+          xhr.onload = () => xhr.status >= 200 && xhr.status < 300
+            ? resolve(JSON.parse(xhr.responseText))
+            : reject(new Error(`${xhr.status}: ${xhr.responseText}`));
+          xhr.onerror = () => reject(new Error('네트워크 실패'));
+          xhr.send(fd);
+        });
+        const created = await done;
+        if (kind === 'photo') {
+          this.form.photo_file_id = created.id;
+          await this.save();
+          this.refreshPhoto();
+          window.toast && window.toast('success', '사진 업로드 완료');
+        } else {
+          window.toast && window.toast('success', `업로드 완료: ${created.original_name}`);
+          if (created.convert_error) window.toast && window.toast('warning', `변환 경고: ${created.convert_error}`);
+          await this.loadFiles();
+        }
+      } catch (e) {
+        window.toast && window.toast('error', `업로드 실패: ${e.message}`);
+      } finally {
+        this.uploading = false;
+        ev.target.value = '';
+      }
+    },
+
+    async removePhoto() {
+      const id = this.form.photo_file_id;
+      if (!id) return;
+      const ok = await Swal.fire({
+        title: '사진을 삭제할까요?', icon: 'warning',
+        showCancelButton: true, confirmButtonText: '삭제', cancelButtonText: '취소', confirmButtonColor: '#dc2626',
+      });
+      if (!ok.isConfirmed) return;
+      this.form.photo_file_id = null;
+      this.refreshPhoto();
+      await this.save();
+      try { await fetch(`/api/resume/files/${id}`, {method: 'DELETE'}); } catch (_) {}
+    },
+
+    async deleteFile(id) {
+      const ok = await Swal.fire({
+        title: '파일을 삭제할까요?', icon: 'warning',
+        showCancelButton: true, confirmButtonText: '삭제', cancelButtonText: '취소', confirmButtonColor: '#dc2626',
+      });
+      if (!ok.isConfirmed) return;
+      try {
+        const r = await fetch(`/api/resume/files/${id}`, {method: 'DELETE'});
+        if (!r.ok) throw new Error(r.status);
+        await this.loadFiles();
+        window.toast && window.toast('success', '파일 삭제 완료');
+      } catch (e) {
+        window.toast && window.toast('error', `삭제 실패: ${e.message}`);
+      }
+    },
+
+    async downloadPdf() {
+      this.exporting = true;
+      try {
+        await this.save();
+        const el = document.getElementById('resume-printable');
+        el.classList.add('pdf-export');
+        const filename = `${(this.sec.personal.name_kr || '이력서').replace(/\s+/g,'_')}_resume.pdf`;
+        await html2pdf().set({
+          margin: 10,
+          filename,
+          image: { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'] },
+        }).from(el).save();
+        el.classList.remove('pdf-export');
+      } catch (e) {
+        window.toast && window.toast('error', `PDF 생성 실패: ${e.message}`);
+      } finally {
+        this.exporting = false;
+      }
+    },
+
+    downloadZip() {
+      if (this.attachments.length === 0) {
+        window.toast && window.toast('warning', '첨부 파일이 없습니다');
+        return;
+      }
+      // 브라우저가 직접 다운로드
+      window.location.href = '/api/resume/attachments.zip';
+    },
+  };
+}
+</script>
+{% endblock %}
