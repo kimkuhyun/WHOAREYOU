@@ -24,24 +24,29 @@
 
 ## 주요 기능
 
-- **통합 채용 검색** — 사람인 · 잡코리아 · 원티드 3개 사이트를 키워드 하나로 동시 수집하고 URL 기준 중복 제거. 사이트별 최적 우회를 자동 선택합니다 (사람인 `httpx`, 잡코리아 `Playwright`, 원티드 `JSON API`).
-- **이력서 ATS 매칭** — 한국 채용 ATS(그리팅 · 나인하이어 등)의 평가 로직을 역설계. 이력서를 올리면 `kiwipiepy`(한국어 명사 추출) + `rapidfuzz`(편집거리)로 공고별 통과 확률을 **0~100점**으로 계산합니다. LLM 없이 빠르게.
-- **AI 기업 조사** — 회사 홈페이지를 Playwright로 최대 16페이지(메인 · 소개 · 연혁 · 뉴스 · 고객사 등) 크롤 → `Ollama` LLM이 사업 내용을 구조화 요약.
-- **평판 감정 분석** — 네이버(직장인 후기 · 카페 · 지식iN)와 구글(보도자료 · 투자 · B2B)을 함께 검색해 평판 스니펫을 수집 → LLM 감정 분석 → 키워드 워드클라우드.
-- **맞춤 자소서 생성** — 내 이력서 · 기업 조사 · 공고 본문 · ATS 결과를 근거로 지원동기 · 자기소개서 초안을 생성. 이력서에 **있는 사실만** 사용해 환각을 차단합니다.
-- **위치 · 통근 분석** — 카카오 지오코딩으로 회사를 좌표화하고, 집까지 직선거리(Haversine) + ODsay 대중교통 경로 · 소요시간 · 비용을 계산.
-- **재무 · 공시** — DART API로 재무/공시 요약 (corp_code 매칭 시).
-- **실시간 진행도** — 크롤 · 조사 진행률을 WebSocket으로 실시간 푸시.
+- **통합 채용 검색** — 사람인 · 잡코리아 · 원티드 3개 사이트를 키워드 하나로 동시 수집하고 URL 기준 중복 제거.
+  - 사이트별로 **다른 우회 전략을 자동 선택**합니다: **사람인** = `httpx`(서버 SSR이라 정적 파싱 충분 · 가장 빠름), **잡코리아** = `Playwright`(봇 차단 강해 풀 브라우저 우회 필요), **원티드** = 비공식 `JSON API`(공고 JSON 직접 호출, rate-limit 주의).
+- **이력서 ATS 매칭** — 한국 채용 ATS(그리팅 · 나인하이어 등)의 평가 로직을 역설계해 LLM 없이 ms 단위로 점수 산출.
+  - **추출**: `kiwipiepy`로 이력서·공고 자격요건·우대사항에서 한국어 명사만 뽑기 → **정규화**: 소문자·동의어 (`백엔드 ≈ Backend ≈ 서버 개발`) → **매칭**: `rapidfuzz`의 `partial_ratio + token_set_ratio` 가중 평균 → 임계값 이상만 hit → 가중 합산 → 0~100점.
+- **AI 기업 조사** — 회사 홈페이지를 Playwright로 BFS 크롤(최대 16p: 메인·소개·연혁·뉴스·고객사·채용·이용약관) → `Trafilatura` + `readability-lxml`로 본문 추출 → `Ollama` LLM이 사업 도메인·핵심 기술·고객사·인재상을 구조화 JSON으로 요약.
+- **평판 감정 분석** — 네이버(직장인 후기·카페·지식iN)와 구글(보도자료·투자·B2B 협력)을 동시 검색해 스니펫 수집 → LLM이 긍/부/중립으로 분류 → 키워드 빈도 → 워드클라우드 + 시간순 트렌드.
+- **맞춤 자소서 생성** — 내 이력서 · 기업 조사 · 공고 본문 · ATS 매칭 키워드를 컨텍스트로 묶어서 지원동기·자기소개서를 생성.
+  - **환각 차단**: 사실 추출 단계에서 "이력서에서 직접 인용한 문장만 사용" 강제 + 생성 후 추출된 사실로 역검증해 일치하지 않으면 재생성.
+- **위치 · 통근 분석** — 카카오 지오코딩으로 회사 좌표 변환 → 집과의 **직선거리(Haversine)** + **ODsay 대중교통 경로**(소요시간·환승·비용·도보 거리) 계산. 출퇴근 가능 회사만 빠르게 필터링.
+- **재무 · 공시** — DART API로 매출·영업이익·자본 등 최근 3년 추이 + 최근 공시 5건 (corp_code 매칭 시).
+- **실시간 진행도** — 크롤·조사 진행률을 WebSocket으로 푸시. 클라이언트는 `progress_bus` SSE 채널을 구독해 페이지별 진행 단계(예: `crawling 7/16`, `llm_summary 1/3`)를 라이브로 표시.
 
 ---
 
 ## 🖼️ 미리보기
 
-| 대시보드 — 취업 현황 한눈에 | 채용 검색 + ATS 매칭 점수 |
+| 대시보드 — 90건 수집·이력서 완성도·최근 검색 키워드 | 채용 검색 — 3사 통합 90건 + 본문 추출·매칭 분석 트리거 |
 |:---:|:---:|
-| ![대시보드](docs/img/dashboard.png) | ![채용 검색](docs/img/jobs.png) |
-| **기업 조사 — 개요 · 공고 · 감정 · 키워드 · 지도 5탭** | **전체 기업 지도 + 집과의 거리순** |
-| ![기업 조사](docs/img/company.png) | ![지도](docs/img/map.png) |
+| ![대시보드](docs/img/dashboard_full.png) | ![채용 검색](docs/img/jobs_search.png) |
+| **기업 상세 — 324개사 사이드바·집까지 거리·5탭(개요/공고/감정/키워드/지도)** | **채용공고 키워드 워드클라우드 — 590+ 키워드 빈도** |
+| ![기업 상세](docs/img/company_overview.png) | ![워드클라우드](docs/img/keyword_cloud.png) |
+| **이력서 카드 그리드 — 직무·회사별 다중 이력서 + 활성 표시** | **전체 기업 지도 + 집과의 거리순 정렬** |
+| ![이력서](docs/img/resumes.png) | ![지도](docs/img/map.png) |
 
 ---
 
@@ -91,20 +96,57 @@ uv run python serve.py          # http://127.0.0.1:8000
 
 ## 🔄 데이터 흐름
 
+```mermaid
+flowchart LR
+  K["키워드 검색"]:::e --> SA["사람인<br/>httpx (SSR)"]:::s
+  K --> JK["잡코리아<br/>Playwright"]:::s
+  K --> WT["원티드<br/>비공식 JSON API"]:::s
+  SA --> D["URL 중복 제거"]
+  JK --> D
+  WT --> D
+  D --> DB[("Job · Company<br/>SQLite")]
+  DB --> GC["카카오 지오코딩"]
+
+  R["이력서 업로드<br/>(docx · pdf)"]:::e --> MD["markitdown 파싱"]
+  MD --> KW["kiwipiepy 명사 추출"]
+  KW --> ATS["rapidfuzz<br/>partial_ratio + token_set<br/>(0~100점)"]
+  ATS --> DB
+
+  RES["기업 조사 트리거"]:::e --> CR["Playwright 16p 크롤"]
+  CR --> EX["Trafilatura<br/>본문 추출"]
+  EX --> LLM["Ollama LLM<br/>구조화 JSON"]
+  RES --> SR["네이버 · 구글<br/>평판 검색"]
+  SR --> SENT["감정 분석<br/>+ 키워드 집계"]
+  RES --> ODS["ODsay 대중교통"]
+  RES --> DART["DART 재무"]
+  LLM --> DB
+  SENT --> DB
+  ODS --> DB
+  DART --> DB
+  CR -.-> WS(["WebSocket<br/>progress_bus"]):::w
+
+  classDef e fill:#ecfdf5,stroke:#10b981,color:#064e3b
+  classDef s fill:#fef9c3,stroke:#ca8a04,color:#713f12
+  classDef w fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+```
+
+### 사이트별 우회 전략 (왜 다른 방식을 쓰나)
+
+| 사이트 | 방식 | 이유 |
+|---|---|---|
+| **사람인** | `httpx` 정적 GET + BeautifulSoup | 서버 SSR이라 HTML이 바로 잡힘 · 가장 빠르고 안정적 |
+| **잡코리아** | `Playwright` 풀 브라우저 | 봇 차단(JS 챌린지·쿠키·UA 체크) 강해 헤드리스 브라우저 필요 |
+| **원티드** | 비공식 `/api/v4/jobs` JSON | 공식 SPA + 비공식 API 둘 다 있음. JSON이 가장 빠르고 깔끔하지만 rate-limit 보수적 |
+
+### ATS 매칭 점수 산식 (LLM 없이 ms 단위)
+
 ```text
-[키워드 검색]
-  사람인(httpx) + 잡코리아(Playwright) + 원티드(JSON API)
-     → URL 중복 제거 → Job / Company DB 저장 → 카카오 지오코딩
+이력서 ────► kiwipiepy 명사 ────┐
+                                ├──► rapidfuzz 가중 매칭 ──► hit / miss
+공고 자격요건·우대 ─► 명사 ─────┘            (0.6 partial_ratio + 0.4 token_set)
 
-[이력서 업로드]  (docx · pdf)
-  markitdown 파싱 → kiwipiepy 명사 추출
-     → 공고별 ATS 매칭 점수(rapidfuzz) 계산
-
-[기업 조사 트리거]
-  회사 홈페이지 Playwright 크롤(최대 16p) → Ollama LLM 구조화
-   + 네이버 · 구글 평판 검색 → LLM 감정 분석 → 키워드 집계
-   + ODsay 대중교통 + DART 재무 + 집까지 거리
-     → 진행도를 WebSocket으로 실시간 푸시
+점수 = Σ(hit 명사 가중치) / Σ(전체 명사 가중치) × 100
+가중치: 자격요건 1.0 · 우대사항 0.6 · 본문 키워드 0.3
 ```
 
 ---
