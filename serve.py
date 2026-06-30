@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 
 # 1) 우리가 직접 ProactorEventLoop 정책 설정
@@ -45,9 +46,13 @@ def main() -> None:
         action="store_true",
         help="코드 변경 시 자동 재로드 (워커 자식 프로세스 정책 미상속으로 Playwright 비호환)",
     )
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=8005)
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()
+
+    # main.py의 _app_url()/lifespan 로그가 실제 바인딩 포트를 보도록 전파
+    os.environ["APP_PORT"] = str(args.port)
+    os.environ["APP_HOST"] = args.host
 
     uvicorn.run(
         "app.main:app",

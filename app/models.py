@@ -108,16 +108,21 @@ class SearchHistory(SQLModel, table=True):
 class Resume(SQLModel, table=True):
     """취업자(사용자)의 이력서. 다중 버전을 허용하되 is_primary=True 1건이 메인.
 
-    sections_json 스키마 (사람인/잡코리아 표준 양식 기반):
+    sections_json 스키마 (이력서 PDF 표준 양식 기반 — 번호 섹션 + 자기소개서 표):
     {
-      "personal": {"name_kr","name_en","birth_date","gender","phone","email","address","road_address"},
+      "personal": {"name_kr","name_en","birth_date","gender","phone","email","address","road_address","military","github"},
       "education": [{"school","major","degree","start_date","end_date","status","gpa","gpa_max","location"}],
       "experience": [{"company","department","position","start_date","end_date","is_current","duties","salary","leave_reason"}],
+      "trainings": [{"start_date","end_date","name","org"}],          # 교육사항(부트캠프/과정)
+      "skill_groups": [{"category","detail"}],                          # 전산관련(보유기술) 구분|사용 내용
       "certifications": [{"name","issuer","acquired_date","number"}],
       "languages": [{"language","test","score","acquired_date"}],
       "awards": [{"name","issuer","awarded_date","description"}],
-      "self_intros": [{"title","content"}],
-      "preferences": {"desired_role","desired_salary","desired_location","start_available","work_type"}
+      "projects": [{"name","summary","period"}],                        # 프로젝트
+      "self_intros": [{"title","content"}],                             # 자기소개서(사용자 항목 추가)
+      "custom": [{"title","content"}],                                  # 기타 사용자 정의 섹션
+      "preferences": {"desired_role","desired_salary","desired_location","start_available","work_type"},
+      "closing": {"date","author"}                                      # 확인 문구
     }
     """
 

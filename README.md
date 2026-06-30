@@ -62,7 +62,7 @@ ollama pull qwen3.5:9b          # 텍스트 LLM (기업 조사 · 감정 분석 
 ollama pull qwen2.5vl:7b        # 비전 fallback (옵션 — 크롤 실패 페이지 OCR)
 
 # 3) 실행
-uv run python serve.py          # http://127.0.0.1:8000
+uv run python serve.py          # http://127.0.0.1:8005
 ```
 
 > 💡 엔트리포인트는 `serve.py`입니다. Windows에서 `uvicorn`을 직접 띄우면 이벤트 루프가 `Selector`로 강제 전환돼 Playwright 서브프로세스가 죽습니다. `serve.py`가 `Proactor` 정책을 강제해 이 문제를 해결합니다.

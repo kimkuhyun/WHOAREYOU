@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def _app_url() -> str:
     host = os.environ.get("APP_HOST", "127.0.0.1")
-    port = os.environ.get("APP_PORT") or os.environ.get("PORT") or "8000"
+    port = os.environ.get("APP_PORT") or os.environ.get("PORT") or "8005"
     return f"http://{host}:{port}/"
 
 
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     # redis_url이 명시되어 있을 때만 시도 (기본값이면 in-memory queue만 사용).
     if settings.redis_url and not settings.redis_url.startswith("redis://localhost"):
         await bus.attach_redis(settings.redis_url)
-    # Chromium 자동 spawn 제거 — 사용자는 일반 Chrome으로 http://127.0.0.1:8000 열기.
+    # Chromium 자동 spawn 제거 — 사용자는 일반 Chrome으로 http://127.0.0.1:8005 열기.
     # 백그라운드 크롤 작업 시작 시점에 BrowserPool.ensure_browser()가 자동 spawn.
     # 작업 끝나면 idle 타이머가 자동 종료 (사용자 탭과 process 완전 분리).
     logger.info("Chromium 자동 spawn 비활성화 — 일반 Chrome으로 %s 접속하세요", _app_url())

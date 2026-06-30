@@ -32,6 +32,21 @@ def _sections_to_text(sections: dict[str, Any]) -> str:
         ).strip()
         if line: parts.append(line)
 
+    # 교육사항(부트캠프/과정) — 교육명·기관
+    for t in sections.get("trainings") or []:
+        line = " ".join(str(t.get(k) or "") for k in ("name", "org")).strip()
+        if line: parts.append(line)
+
+    # 보유기술(전산관련) — 구분 + 사용 내용. 키워드가 가장 밀집된 영역이라 매칭에 중요.
+    for g in sections.get("skill_groups") or []:
+        line = " ".join(str(g.get(k) or "") for k in ("category", "detail")).strip()
+        if line: parts.append(line)
+
+    # 프로젝트 — 프로젝트명 + 핵심 내용
+    for pr in sections.get("projects") or []:
+        line = " ".join(str(pr.get(k) or "") for k in ("name", "summary")).strip()
+        if line: parts.append(line)
+
     # 자격증
     for c in sections.get("certifications") or []:
         line = " ".join(str(c.get(k) or "") for k in ("name", "issuer")).strip()

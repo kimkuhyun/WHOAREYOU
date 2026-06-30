@@ -202,6 +202,16 @@
           <div class="text-sm font-semibold text-emerald-800" x-text="result?.new_companies"></div>
         </div>
       </div>
+      <template x-if="result && result.warnings && Object.keys(result.warnings).length">
+        <div class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <div class="flex items-center gap-1 font-semibold">
+            <i data-lucide="alert-triangle" class="h-3.5 w-3.5"></i> 일부 소스 경고 — 0건이 '실제 없음'이 아닐 수 있어요
+          </div>
+          <template x-for="(msg, src) in result.warnings" :key="src">
+            <div class="mt-0.5" x-text="msg"></div>
+          </template>
+        </div>
+      </template>
     </div>
 
     {# 고급 도구 — 접힌 상태가 기본 #}
@@ -671,7 +681,12 @@ function jobsApp() {
         const r = await fetch(`/api/jobs/collect/${taskId}`);
         if (!r.ok) throw new Error(`${r.status}`);
         this.result = await r.json();
-        window.toast && window.toast('success', `수집 완료 — 신규 ${this.result.new_jobs}건`);
+        const warns = this.result.warnings && Object.values(this.result.warnings);
+        if (warns && warns.length) {
+          window.toast && window.toast('warning', `수집 완료(신규 ${this.result.new_jobs}건) · ⚠ ${warns[0]}`);
+        } else {
+          window.toast && window.toast('success', `수집 완료 — 신규 ${this.result.new_jobs}건`);
+        }
         htmx.trigger('#jobs-filter-form', 'submit');
         this.loadBuckets();
       } catch(e) {

@@ -34,38 +34,49 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10MB
 
 
 # 표준 섹션 스켈레톤 — 응답 시 누락 키 채우기에 사용
+# 레이아웃은 김구현_이력서.pdf 양식 기준(번호 섹션 + 자기소개서 표 + 확인 문구).
 _DEFAULT_SECTIONS: dict[str, Any] = {
     "personal": {
         "name_kr": "", "name_en": "", "birth_date": "",
         "gender": "", "phone": "", "email": "",
         "address": "", "road_address": "",
+        "military": "",        # 병역
+        "github": "",          # GitHub 등 링크
     },
     "education": [],
     "experience": [],
+    "trainings": [],           # 교육사항(부트캠프/과정 등) — [{start_date, end_date, name, org}]
+    "skill_groups": [],        # 전산관련(보유기술) — [{category, detail}] (구분 | 사용 내용)
     "certifications": [],
     "languages": [],
     "awards": [],
+    "projects": [],            # 프로젝트 — [{name, summary, period}]
     "activities": [],          # 외부활동(동아리, 학회 등) — [{title, role, start_date, end_date, description}]
     "volunteers": [],          # 봉사활동 — [{title, org, hours, date}]
     "publications": [],        # 논문/저서 — [{title, journal, date, link}]
     "patents": [],             # 특허/지적재산권 — [{title, number, date, role}]
-    "self_intros": [],
+    "self_intros": [],         # 자기소개서 — [{title, content}] (사용자가 항목 추가)
     "preferences": {
         "desired_role": "", "desired_salary": "",
         "desired_location": "", "start_available": "",
         "work_type": "",
     },
     "custom": [],              # 사용자 정의 섹션 — [{title, content}]
+    "closing": {               # 확인 문구 — "위 기재한 사항은 사실과 다름이 없음을..."
+        "date": "", "author": "",
+    },
     # UI 노출 토글: 각 섹션을 보일지 (양식 템플릿 적용 결과 저장)
     "visible": {
-        "personal": True, "education": True, "experience": True,
-        "certifications": True, "languages": True, "awards": True,
+        "personal": True, "education": True, "experience": False,
+        "trainings": True, "skill_groups": True,
+        "certifications": True, "languages": False, "awards": True,
+        "projects": True,
         "activities": False, "volunteers": False,
         "publications": False, "patents": False,
-        "self_intros": True, "preferences": True,
+        "self_intros": True, "preferences": False, "closing": True,
     },
-    # 양식 템플릿 — saramin / jobkorea / minimal / full
-    "template": "saramin",
+    # 양식 템플릿 — standard(PDF 양식) / minimal / full / custom
+    "template": "standard",
 }
 
 

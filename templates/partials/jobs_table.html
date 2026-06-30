@@ -219,7 +219,7 @@
           {# 회사 #}
           <div class="text-[12px]">
             {% if company %}
-              <a href="/company/{{ company.id }}"
+              <a href="/companies?id={{ company.id }}"
                  class="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline"
                  title="{{ company.name }}">
                 <i data-lucide="building-2" class="h-3.5 w-3.5"></i>
@@ -267,7 +267,7 @@
                 원문
               </a>
               {% if company %}
-                <a href="/company/{{ company.id }}"
+                <a href="/companies?id={{ company.id }}"
                    class="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
                    title="회사 페이지로 이동">
                   <span>회사</span>
@@ -350,7 +350,7 @@
           </div>
           <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-slate-500">
             {% if company %}
-              <a href="/company/{{ company.id }}"
+              <a href="/companies?id={{ company.id }}"
                  class="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline"
                  title="{{ company.name }}">
                 <i data-lucide="building-2" class="h-3 w-3"></i>
@@ -400,7 +400,7 @@
             원문
           </a>
           {% if company %}
-            <a href="/company/{{ company.id }}"
+            <a href="/companies?id={{ company.id }}"
                class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
                title="회사 페이지로 이동">
               <span>회사</span>

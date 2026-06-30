@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Body, Form, HTTPException
 from sqlalchemy import desc, select
 
 from app.analysis.keywords import keywords_to_wordcloud
@@ -18,7 +18,7 @@ from app.geo.odsay import raw_request as odsay_raw_request
 from app.db import async_session_maker
 from app.deps import SessionDep
 from app.geo.distance import haversine_km
-from app.models import Company, Job, SentimentSnippet
+from app.models import Company, DomainDiscoveryAttempt, HomepagePage, Job, SentimentSnippet
 from app.ui import settings_store
 from app.ui.progress_bus import ProgressEvent, get_bus, make_progress_callback
 
@@ -115,6 +115,65 @@ async def update_company(
         "domain_source": company.domain_source,
         "dart_corp_code": company.dart_corp_code,
     }
+
+
+async def _purge_company(session, company_id: int) -> dict[str, Any] | None:
+    """회사 1건 삭제 준비 (commit은 호출 측). 없으면 None.
+
+    관련 공고는 **삭제하지 않고** 회사 연결만 해제(company_id=NULL)해 사용자의
+    지원 추적/관심 표시를 보존한다. 회사 종속 조사 데이터(평판 스니펫·홈페이지
+    크롤·도메인 발견 로그)는 함께 삭제한다.
+    """
+    company = await session.get(Company, company_id)
+    if not company:
+        return None
+    name = company.name
+    jobs = (
+        await session.execute(select(Job).where(Job.company_id == company_id))
+    ).scalars().all()
+    for j in jobs:
+        j.company_id = None  # 공고 보존, 연결만 해제
+    for model in (SentimentSnippet, HomepagePage, DomainDiscoveryAttempt):
+        rows = (
+            await session.execute(select(model).where(model.company_id == company_id))
+        ).scalars().all()
+        for row in rows:
+            await session.delete(row)
+    await session.delete(company)
+    return {"id": company_id, "name": name, "jobs_unlinked": len(jobs)}
+
+
+@router.delete("/api/companies/{company_id}")
+async def delete_company(company_id: int, session: SessionDep) -> dict[str, Any]:
+    """모은 회사 1건 삭제 — 지도/회사 목록에서 제거."""
+    res = await _purge_company(session, company_id)
+    if res is None:
+        raise HTTPException(404, "회사를 찾을 수 없습니다")
+    await session.commit()
+    return {"deleted": 1, **res}
+
+
+@router.post("/api/companies/bulk-delete")
+async def bulk_delete_companies(
+    session: SessionDep, payload: dict[str, Any] = Body(...)
+) -> dict[str, Any]:
+    """회사 일괄 삭제. payload: {ids: [int, ...]}."""
+    raw_ids = payload.get("ids") or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        raise HTTPException(400, "ids(배열)가 필요합니다")
+    deleted: list[int] = []
+    jobs_unlinked = 0
+    for raw in raw_ids:
+        try:
+            cid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        res = await _purge_company(session, cid)
+        if res:
+            deleted.append(res["id"])
+            jobs_unlinked += res["jobs_unlinked"]
+    await session.commit()
+    return {"deleted": len(deleted), "ids": deleted, "jobs_unlinked": jobs_unlinked}
 
 
 # company_id → 진행 중인 research task 정보 (페이지 재진입 시 복원용)

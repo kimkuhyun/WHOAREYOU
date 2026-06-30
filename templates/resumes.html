@@ -76,18 +76,18 @@
             <i data-lucide="edit-3" class="h-3.5 w-3.5"></i> 편집
           </a>
           <div class="flex items-center gap-1">
-            <button type="button" @click="activate(r)" :disabled="r.is_primary || busy[r.id]"
+            <button type="button" @click="activate(r)" :disabled="r.is_primary || busyId === r.id"
                     class="inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors"
                     :class="r.is_primary ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed' : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50'"
                     title="이 이력서를 활성으로 (매칭 분석에 사용)">
               <i data-lucide="zap" class="h-3 w-3"></i> <span x-text="r.is_primary ? '활성중' : '활성화'"></span>
             </button>
-            <button type="button" @click="duplicate(r)" :disabled="busy[r.id]"
+            <button type="button" @click="duplicate(r)" :disabled="busyId === r.id"
                     class="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
                     title="복제 (별도 버전 만들기)">
               <i data-lucide="copy" class="h-3 w-3"></i> 복제
             </button>
-            <button type="button" @click="remove(r)" :disabled="busy[r.id]"
+            <button type="button" @click="remove(r)" :disabled="busyId === r.id"
                     class="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
                     :title="r.is_primary ? '활성 이력서는 삭제 전 다른 이력서를 활성화하세요' : '삭제'">
               <i data-lucide="trash-2" class="h-3 w-3"></i>
@@ -106,7 +106,7 @@ function resumesApp() {
     resumes: [],
     loading: true,
     creating: false,
-    busy: {},   // {id: true/false}
+    busyId: null,   // 현재 처리 중인 이력서 id (스칼라 — 동적키 객체는 x-for 바인딩 반응성 깨짐)
 
     async load() {
       this.loading = true;
@@ -178,7 +178,7 @@ function resumesApp() {
 
     async activate(r) {
       if (r.is_primary) return;
-      this.busy = {...this.busy, [r.id]: true};
+      this.busyId = r.id;
       try {
         const res = await fetch(`/api/resumes/${r.id}/activate`, {method: 'POST'});
         if (!res.ok) throw new Error(res.status);
@@ -187,12 +187,12 @@ function resumesApp() {
       } catch (e) {
         window.toast && window.toast('error', `활성화 실패: ${e.message}`);
       } finally {
-        this.busy = {...this.busy, [r.id]: false};
+        this.busyId = null;
       }
     },
 
     async duplicate(r) {
-      this.busy = {...this.busy, [r.id]: true};
+      this.busyId = r.id;
       try {
         const res = await fetch(`/api/resumes/${r.id}/duplicate`, {method: 'POST'});
         if (!res.ok) throw new Error(res.status);
@@ -202,7 +202,7 @@ function resumesApp() {
       } catch (e) {
         window.toast && window.toast('error', `복제 실패: ${e.message}`);
       } finally {
-        this.busy = {...this.busy, [r.id]: false};
+        this.busyId = null;
       }
     },
 
@@ -225,7 +225,7 @@ function resumesApp() {
         confirmButtonColor: '#dc2626',
       });
       if (!confirm.isConfirmed) return;
-      this.busy = {...this.busy, [r.id]: true};
+      this.busyId = r.id;
       try {
         const res = await fetch(`/api/resume/${r.id}`, {method: 'DELETE'});
         if (!res.ok) throw new Error(res.status);
@@ -234,7 +234,7 @@ function resumesApp() {
       } catch (e) {
         window.toast && window.toast('error', `삭제 실패: ${e.message}`);
       } finally {
-        this.busy = {...this.busy, [r.id]: false};
+        this.busyId = null;
       }
     },
   };

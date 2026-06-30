@@ -705,6 +705,29 @@ async def research_company_playwright(
 
     await progress("init", 5, f"기업 조사 시작: {company_name}")
 
+    # Ollama 헬스 프로브 — LLM이 죽었는데 '성공'으로 끝나는 침묵 실패 방지.
+    # 서버 다운/텍스트 모델 미설치를 미리 잡아 사용자에게 알리고 report에 남긴다.
+    llm_available = True
+    llm_note = ""
+    try:
+        _h = await ollama.health()
+        if not _h.get("text_model_available"):
+            llm_available = False
+            llm_note = f"Ollama 텍스트 모델 '{text_model}' 미설치"
+    except Exception as exc:
+        llm_available = False
+        llm_note = f"Ollama 연결 실패 ({exc})"
+    report["llm_available"] = llm_available
+    if not llm_available:
+        logger.warning("Ollama 사용 불가 — 홈페이지 요약·감정분석 건너뜀: %s", llm_note)
+        await progress("warn", 6, f"⚠ {llm_note} — 홈페이지 요약·감정분석은 건너뜁니다(검색·평판 수집은 진행).")
+        try:
+            from app.ui import api_status
+
+            await api_status.record_error("ollama", llm_note)
+        except Exception:
+            pass
+
     # ───── Stage 1: 병렬 시작 (geocode + dart + discover + reviews + transit) ─────
     geo_task = asyncio.create_task(
         step_geocode(company_name, job_locations, kakao_key)
@@ -967,6 +990,9 @@ async def research_company_playwright(
             report["homepage"] = homepage_payload
         elif homepage_audit and homepage_audit.get("error"):
             report["homepage_error"] = homepage_audit["error"]
+        elif homepage_structured and homepage_structured.get("_error"):
+            # 크롤은 됐지만 LLM 구조화가 실패한 경우 — 조용히 드롭하지 않고 노출
+            report["homepage_error"] = f"홈페이지 요약(LLM) 실패: {homepage_structured['_error']}"
 
         # 5) emotion + sentiment snippets — source별로 보존 (naver / google)
         if review_snippets:
@@ -984,6 +1010,8 @@ async def research_company_playwright(
         if emotion_result and "overall_score" in emotion_result:
             company.emotion_json = json.dumps(emotion_result, ensure_ascii=False)
             report["emotion"] = emotion_result
+        elif emotion_result and emotion_result.get("_error"):
+            report["emotion_error"] = f"감정 분석(LLM) 실패: {emotion_result['_error']}"
 
         company.last_researched_at = utcnow()
         await session.commit()

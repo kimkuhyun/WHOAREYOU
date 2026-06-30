@@ -129,7 +129,7 @@
             </div>
             <div class="mt-1.5">
               <template x-for="item in (apps.items || []).filter(i => i.status === '{{ code }}').slice(0, 5)" :key="item.job_id">
-                <a :href="item.company ? `/company/${item.company.id}` : item.url"
+                <a :href="item.company ? `/companies?id=${item.company.id}` : item.url"
                    :target="item.company ? '_self' : '_blank'"
                    class="kanban-card block text-xs">
                   <div class="line-clamp-1 font-medium text-slate-800" x-text="item.company ? item.company.name : '(회사 미연결)'"></div>
@@ -216,7 +216,7 @@
             <li class="flex items-start gap-2 text-xs">
               <span class="activity-dot mt-1.5" :class="activityDotClass(item.status)"></span>
               <div class="min-w-0 flex-1">
-                <a :href="item.company ? `/company/${item.company.id}` : item.url"
+                <a :href="item.company ? `/companies?id=${item.company.id}` : item.url"
                    :target="item.company ? '_self' : '_blank'"
                    class="line-clamp-1 font-medium text-slate-800 hover:text-brand-700">
                   <span x-text="item.company ? item.company.name : item.title"></span>

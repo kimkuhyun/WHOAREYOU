@@ -36,6 +36,8 @@ class CollectStats:
     new_jobs: int
     new_companies: int
     errors: dict[str, str]
+    # 소스별 경고 — 예외는 아니지만 '0건인데 사이트 개편/봇차단 의심' 등 사용자가 알아야 할 신호
+    warnings: dict[str, str]
 
 
 async def _noop(stage: str, pct: int, msg: str) -> None:
@@ -97,6 +99,7 @@ async def collect_jobs(
 
     # 어댑터를 순차 실행 (Wanted 등 SPA는 동시 실행 시 카드 렌더 대기 실패하는 케이스 다수).
     results: list[tuple[str, list[JobStub], str | None]] = []
+    health_by_source: dict[str, str] = {}
     base_pct = 10
     span = 40  # init~50% 사이에서 어댑터 진행 분할
     for i, adapter in enumerate(adapters):
@@ -104,6 +107,10 @@ async def collect_jobs(
         await progress("search", local_pct, f"{adapter.source} 검색 시작")
         result = await _search_one(adapter, pool, keyword, max_per_source, progress, filters)
         results.append(result)
+        # 어댑터가 self.last_health로 '정상 0건 vs 파서 깨짐/봇차단'을 구분해 올림
+        h = getattr(adapter, "last_health", "ok")
+        if h and h != "ok":
+            health_by_source[adapter.source] = h
 
     per_source: dict[str, int] = {}
     errors: dict[str, str] = {}
@@ -113,6 +120,18 @@ async def collect_jobs(
         if err:
             errors[name] = err
         all_stubs.extend(stubs)
+
+    # 소스별 경고 메시지화 — 0건이 '진짜 없음'인지 '크롤러 고장'인지 사용자에게 구분해 알림
+    warnings: dict[str, str] = {}
+    for src, h in health_by_source.items():
+        if per_source.get(src, 0) > 0:
+            continue  # 결국 건졌으면 경고 불필요
+        if h == "blocked":
+            warnings[src] = f"{src}: 응답이 비정상입니다(봇 차단 의심) — 0건은 실제가 아닐 수 있어요."
+        elif h == "parse_suspect":
+            warnings[src] = f"{src}: 정상 응답인데 0건입니다 — 사이트 개편(파서 깨짐) 또는 검색결과 없음 의심."
+    if warnings:
+        await progress("warn", 58, " / ".join(warnings.values()))
 
     # URL 단위 dedupe (어댑터 간 동일 URL은 거의 없지만 안전장치)
     by_url: dict[str, JobStub] = {}
@@ -162,6 +181,7 @@ async def collect_jobs(
         new_jobs=new_jobs,
         new_companies=new_companies,
         errors=errors,
+        warnings=warnings,
     )
 
 

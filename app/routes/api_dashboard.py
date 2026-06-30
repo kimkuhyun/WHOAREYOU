@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import desc, func, select
 
 from app.analysis.categories import all_categories, classify_title
@@ -313,3 +313,64 @@ async def get_application_summary(session: SessionDep) -> dict[str, Any]:
         "total_companies": int(total_companies),
         "in_progress": sum(v for k, v in by_status.items() if k != "none"),
     }
+
+
+@router.post("/api/backup")
+async def create_backup() -> dict[str, Any]:
+    """전체 데이터(SQLite DB + 업로드 파일)를 타임스탬프 zip으로 백업.
+
+    단일 whoareyou.db에 공고·기업조사·이력서·자소서·집주소·키가 모두 들어있어
+    파일 사고 시 통째로 사라진다. WAL 포함 일관 스냅샷(sqlite backup API)을 떠
+    data/backups/에 zip으로 보관한다. 블로킹 I/O라 to_thread로 실행.
+    """
+    import asyncio
+
+    from app.config import ROOT_DIR
+
+    def _do_backup() -> dict[str, Any]:
+        import sqlite3
+        import zipfile
+        from datetime import datetime
+
+        data_dir = ROOT_DIR / "data"
+        db_path = data_dir / "whoareyou.db"
+        uploads_dir = data_dir / "uploads"
+        backups_dir = data_dir / "backups"
+        backups_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 1) WAL까지 반영된 일관 스냅샷 (실행 중에도 안전)
+        snap = backups_dir / f"_snap_{ts}.db"
+        src = sqlite3.connect(str(db_path))
+        try:
+            dst = sqlite3.connect(str(snap))
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+
+        # 2) 스냅샷 db + uploads/ 를 zip 으로 묶기
+        zip_path = backups_dir / f"whoareyou_backup_{ts}.zip"
+        upload_files = 0
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(snap, "whoareyou.db")
+            if uploads_dir.exists():
+                for f in uploads_dir.rglob("*"):
+                    if f.is_file():
+                        z.write(f, f"uploads/{f.relative_to(uploads_dir).as_posix()}")
+                        upload_files += 1
+        snap.unlink(missing_ok=True)
+        return {
+            "ok": True,
+            "filename": zip_path.name,
+            "path": str(zip_path),
+            "size_bytes": zip_path.stat().st_size,
+            "upload_files": upload_files,
+        }
+
+    try:
+        return await asyncio.to_thread(_do_backup)
+    except Exception as exc:
+        raise HTTPException(500, f"백업 실패: {type(exc).__name__}: {exc}") from exc

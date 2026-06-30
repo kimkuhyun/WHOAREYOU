@@ -105,6 +105,11 @@ class SaraminAdapter:
         """ctx는 호환을 위해 받지만 Saramin은 httpx로 직접 요청."""
         stubs: list[JobStub] = []
         seen: set[str] = set()
+        # 수집 건강도 — 호출부(collect_jobs)가 읽어 UI 경고로 띄움.
+        #   ok            : 정상 수집
+        #   blocked       : 200 아님/<50KB (봇 차단 의심)
+        #   parse_suspect : 정상 응답(200·50KB+)인데 0건 (사이트 개편=파서 깨짐 또는 결과 없음)
+        self.last_health = "ok"
         async with httpx.AsyncClient(headers=DESKTOP_HEADERS, timeout=20.0, follow_redirects=True) as client:
             for page_num in range(1, 5):
                 if len(stubs) >= max_results:
@@ -114,16 +119,23 @@ class SaraminAdapter:
                     r = await client.get(url)
                 except Exception as exc:
                     logger.warning("사람인 GET 실패 (%s): %s", url, exc)
+                    if page_num == 1:
+                        self.last_health = "blocked"
                     break
                 # 사람인은 응답에 charset을 명시 안 해 httpx가 ISO-8859-1로 추정하는 경우 있음 → 강제 UTF-8
                 r.encoding = "utf-8"
                 if r.status_code != 200 or len(r.text) < 50_000:
                     logger.warning("사람인 응답 비정상 page=%d status=%d len=%d", page_num, r.status_code, len(r.text))
+                    if page_num == 1:
+                        self.last_health = "blocked"
                     break
 
                 page_stubs = self._parse_listing(r.text)
                 if not page_stubs:
                     logger.info("사람인 page=%d 결과 없음 — 중단", page_num)
+                    if page_num == 1:
+                        # 정상 응답인데 0건 → 셀렉터 깨짐 또는 실제 결과 없음
+                        self.last_health = "parse_suspect"
                     break
 
                 for stub in page_stubs:
@@ -142,6 +154,14 @@ class SaraminAdapter:
     def _parse_listing(self, html: str) -> list[JobStub]:
         tree = lxml_html.fromstring(html)
         items = tree.cssselect(".item_recruit")
+        if not items:
+            # 폴백: 사람인이 리스트 컨테이너 클래스를 바꾼 경우 대비 (개편 감지·일부 복구)
+            for sel in (".list_item", ".item_list", "[class*='item_recruit']", "[class*='list_recruit']"):
+                alt = tree.cssselect(sel)
+                if alt:
+                    items = alt
+                    logger.warning("사람인 .item_recruit 0건 → 폴백 셀렉터 '%s'로 %d건", sel, len(alt))
+                    break
         stubs: list[JobStub] = []
         for item in items:
             try:

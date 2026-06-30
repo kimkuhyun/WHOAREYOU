@@ -17,13 +17,72 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
+
+import httpx
 
 from app.crawler.browser import get_pool
 from app.crawler.llm import LLMConfig, OllamaClient, OllamaUnavailable
 
 logger = logging.getLogger(__name__)
+
+# ── 원티드 전용: 공식 상세 JSON API로 본문 직접 수집 ──
+# 원티드 /wd/ 페이지는 anti-bot으로 Playwright 렌더가 막히고, 본문이 "상세 정보 더 보기"
+# 버튼 뒤에 접혀 있어 캡처가 잘린다. 공개 API가 구조화 본문을 그대로 주므로 훨씬 안정적.
+_WANTED_JD_RE = re.compile(r"wanted\.co\.kr/wd/(\d+)")
+_WANTED_API = "https://www.wanted.co.kr/api/v4/jobs/{job_id}"
+_WANTED_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Referer": "https://www.wanted.co.kr/",
+}
+
+
+async def _fetch_wanted_jd_via_api(
+    url: str, *, known_title: str | None = None, known_company: str | None = None
+) -> str:
+    """원티드 /wd/{id} → 상세 API로 본문 마크다운 생성. 실패 시 빈 문자열."""
+    m = _WANTED_JD_RE.search(url or "")
+    if not m:
+        return ""
+    job_id = m.group(1)
+    try:
+        async with httpx.AsyncClient(headers=_WANTED_HEADERS, timeout=15.0, follow_redirects=True) as client:
+            r = await client.get(_WANTED_API.format(job_id=job_id))
+        if r.status_code != 200:
+            logger.warning("원티드 상세 API status=%d (job %s)", r.status_code, job_id)
+            return ""
+        job = (r.json() or {}).get("job") or {}
+        detail = job.get("detail") or {}
+    except Exception:
+        logger.exception("원티드 상세 API 호출 실패 (job %s)", job_id)
+        return ""
+
+    title = known_title or job.get("position") or ""
+    company = known_company or ((job.get("company") or {}).get("name") or "")
+    # 구조화 본문 — 원문 그대로 (요약/가공 X)
+    sections = [
+        ("주요업무", detail.get("main_tasks")),
+        ("자격요건", detail.get("requirements")),
+        ("우대사항", detail.get("preferred_points")),
+        ("혜택 및 복지", detail.get("benefits")),
+        ("포지션 상세 / 회사 소개", detail.get("intro")),
+    ]
+    body = [f"## {label}\n{txt.strip()}" for label, txt in sections if (txt or "").strip()]
+    if not body:
+        return ""
+    header: list[str] = []
+    if title:
+        header.append(f"# {title}")
+    if company:
+        header.append(f"**{company}**")
+    return ("\n".join(header) + "\n\n" + "\n\n".join(body)).strip()
 
 # Text LLM 입력 한도 — 사람인 같은 페이지가 회사소개·인재상까지 합치면 25k+ 되는 경우 많음
 MAX_TEXT_CHARS = 40_000
@@ -318,6 +377,16 @@ async def fetch_jd(
     """
     if not url:
         return JdResult(ok=False, md="", error="URL이 비어 있습니다")
+
+    # 0) 원티드: 공식 상세 API로 직접 수집 (Playwright 렌더·'상세 정보 더 보기'·anti-bot 우회)
+    #    실패하면 아래 일반 Playwright 경로로 폴백.
+    if source == "wanted" or "wanted.co.kr/wd/" in url:
+        w_md = await _fetch_wanted_jd_via_api(
+            url, known_title=known_title, known_company=known_company
+        )
+        if w_md and len(w_md) >= 80:
+            return JdResult(ok=True, md=w_md, char_count=len(w_md), extracted_from="wanted-api")
+        logger.info("원티드 API 본문 수집 실패 → Playwright 폴백: %s", url)
 
     # 1) 페이지 캡처
     try:

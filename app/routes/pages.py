@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import ROOT_DIR
@@ -65,14 +65,18 @@ async def job_detail_page(job_id: int, request: Request, session: SessionDep) ->
     )
 
 
-@router.get("/map", response_class=HTMLResponse)
-async def map_page(request: Request, session: SessionDep) -> HTMLResponse:
+@router.get("/companies", response_class=HTMLResponse)
+async def companies_page(request: Request, session: SessionDep) -> HTMLResponse:
+    """기업 페이지 — 좌측 회사 목록 + (미선택)전체 지도 / (선택)회사 상세.
+
+    ?id=N 딥링크는 클라이언트(Alpine)가 location.search로 읽어 해당 회사 자동 선택.
+    """
     settings = await settings_store.get_all(session)
     return templates.TemplateResponse(
         request,
-        "map.html",
+        "companies.html",
         {
-            "active": "map",
+            "active": "companies",
             "kakao_js_key": settings.get("kakao_js_key", ""),
             "home_lat": settings.get("home_lat", ""),
             "home_lng": settings.get("home_lng", ""),
@@ -81,8 +85,16 @@ async def map_page(request: Request, session: SessionDep) -> HTMLResponse:
     )
 
 
+@router.get("/map")
+async def map_redirect() -> RedirectResponse:
+    """구 경로 호환 — /map 은 /companies 로 이동."""
+    return RedirectResponse("/companies", status_code=307)
+
+
 @router.get("/company/{company_id}", response_class=HTMLResponse)
-async def company_page(company_id: int, request: Request, session: SessionDep) -> HTMLResponse:
+async def company_page(
+    company_id: int, request: Request, session: SessionDep, embed: int = 0
+) -> HTMLResponse:
     from app.models import Company
 
     company = await session.get(Company, company_id)
@@ -94,11 +106,12 @@ async def company_page(company_id: int, request: Request, session: SessionDep) -
         request,
         "company.html",
         {
-            "active": "jobs",
+            "active": "companies",
             "company": company,
             "kakao_js_key": settings.get("kakao_js_key", ""),
             "home_lat": settings.get("home_lat", ""),
             "home_lng": settings.get("home_lng", ""),
+            "embed": bool(embed),  # 기업 페이지 iframe 임베드 — 헤더/드로어 숨김
         },
     )
 
