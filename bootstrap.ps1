@@ -25,7 +25,8 @@ if (-not (Test-Path $uv)) {
 
 # 1) 격리 Python 3.11 (uv가 조달 — 시스템 Python 불필요)
 if (-not (Test-Path $py)) {
-  Say "[1/3] Python 환경 생성 중..."
+  Say "[1/3] Python 3.11 준비 중 (없으면 uv가 자동 설치 — 사용자 Python 불필요)..."
+  & $uv python install 3.11
   & $uv venv $venv --python 3.11
 }
 
