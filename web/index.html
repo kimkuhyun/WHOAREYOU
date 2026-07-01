@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WHOAREYOU</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.31.0/tabler-icons.min.css">
+<style>
+:root{
+  --green:#047857;--green-500:#10b981;--green-bg:#ecfdf5;
+  --ink:#0f172a;--muted:#64748b;--hint:#94a3b8;--line:#e8edf0;--line2:#f1f5f4;
+  --surface:#fff;--canvas:#f4f7f6;--page:#f7faf9;
+  --safe:#047857;--safe-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fff8eb;--danger:#b91c1c;--danger-bg:#fef2f2;
+  --r-ctl:10px;--r-card:14px;--r-tile:12px;--r-pill:999px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);font-family:Pretendard,system-ui,sans-serif;color:var(--ink);font-weight:400;line-height:1.5}
+/* 앱 헤더(가짜 윈도우 컨트롤 없음 — 창 프레임은 pywebview 네이티브) */
+.header{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--page);z-index:5}
+.brand{display:flex;align-items:center;gap:7px;font-weight:500;color:var(--green)}.brand i{font-size:18px}
+.tabs{display:flex;gap:4px;margin-left:6px}
+.tab{font-size:14px;color:var(--muted);padding:6px 12px;border-radius:var(--r-ctl);cursor:pointer;border:none;background:none;font-family:inherit}
+.tab.on{color:var(--green);background:var(--green-bg);font-weight:500}
+.body{padding:14px 16px 20px}
+.panel.hidden{display:none}
+.search{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:var(--r-ctl);padding:6px 8px 6px 12px;background:var(--surface)}
+.search i{font-size:17px;color:var(--hint)}
+.search input{flex:1;border:none;outline:none;font-family:inherit;font-size:14px;color:var(--ink);background:none}
+.subbar{display:flex;align-items:center;gap:8px;margin:13px 2px 10px}
+.subbar .meta{font-size:13px;color:var(--muted);flex:1}.subbar .meta b{color:var(--ink);font-weight:500}
+.btn{font-size:13px;border:1px solid var(--line);border-radius:var(--r-ctl);padding:8px 13px;background:none;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:inherit}.btn i{font-size:15px}
+.btn.green{border-color:var(--green-500);color:#fff;background:var(--green)}
+.btn:disabled{opacity:.5;cursor:default}
+.card{border:1px solid var(--line);border-radius:var(--r-card);padding:15px 16px;margin-bottom:12px;background:var(--surface)}
+.card.done{opacity:.55}
+.crow{display:flex;align-items:center;gap:12px}.cmain{flex:1;min-width:0}.co{font-size:15.5px;font-weight:500}.co .role{color:var(--muted);font-weight:400}
+.co .site{font-size:11px;font-weight:600;color:var(--green);background:var(--green-bg);border-radius:var(--r-pill);padding:2px 7px;margin-right:6px;vertical-align:middle}
+.fit{text-align:center;flex-shrink:0}.fit .n{font-size:27px;font-weight:500;color:var(--green);line-height:1}.fit .l{font-size:11px;color:var(--hint)}
+.axes{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:15px 0 11px}
+.axis{background:var(--canvas);border-radius:var(--r-tile);padding:12px 10px;text-align:center}
+.axis .ic{font-size:19px;color:var(--green-500)}.axis .lab{font-size:11.5px;color:var(--muted);margin-top:4px}.axis .val{font-size:16px;font-weight:500;margin-top:5px}
+.axis.safe .ic,.axis.safe .val{color:var(--safe)}.axis.warn .ic,.axis.warn .val{color:var(--warn)}.axis.danger .ic,.axis.danger .val{color:var(--danger)}
+.axis.na{background:var(--line2)}.axis.na .ic,.axis.na .val{color:var(--hint)}
+.na-t{font-size:11.5px;color:var(--hint);font-weight:400}
+.axis .grade{font-size:11.5px;font-weight:400}
+.meta2{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:5px 10px;padding-top:11px;border-top:1px solid var(--line)}
+.acts{display:flex;gap:8px;margin-top:13px}.acts .btn.primary{margin-left:auto;border-color:var(--green-500);color:#fff;background:var(--green)}
+.empty{text-align:center;color:var(--hint);font-size:14px;padding:48px 0}
+.loading{text-align:center;color:var(--muted);font-size:14px;padding:40px 0;display:none}.loading.on{display:block}
+.loading i{font-size:22px;color:var(--green-500);animation:spin 1s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.srow{display:flex;padding:12px 0;border-bottom:1px solid var(--line2);font-size:14px}.srow .k{width:130px;color:var(--muted)}.srow .v{flex:1;font-weight:500}
+.h3{font-size:13px;font-weight:500;color:var(--muted);margin:18px 2px 9px;display:flex;align-items:center;gap:6px}.h3 i{font-size:15px;color:var(--green-500)}
+.field{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--line2)}
+.field .k{font-size:13.5px;width:88px;flex-shrink:0;padding-top:5px;color:var(--muted)}
+.field .v{flex:1;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.field.inline{align-items:center}.field.inline .k{padding-top:0}
+.fchip{font-size:12.5px;color:var(--muted);border:1px solid var(--line);border-radius:var(--r-pill);padding:5px 11px;cursor:pointer;background:none;font-family:inherit}
+.fchip.on{color:var(--green);border-color:var(--green-500);background:var(--green-bg);font-weight:500}
+.sel{font-family:inherit;font-size:13px;color:var(--ink);border:1px solid var(--line);border-radius:var(--r-ctl);padding:7px 10px;background:var(--surface)}
+.tin{font-family:inherit;font-size:13px;color:var(--ink);border:1px solid var(--line);border-radius:var(--r-ctl);padding:7px 10px;background:var(--surface)}
+.tog{width:38px;height:22px;border-radius:var(--r-pill);background:var(--line);position:relative;cursor:pointer;flex-shrink:0}.tog.on{background:var(--green-500)}.tog::after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .15s}.tog.on::after{left:18px}
+.weight{display:flex;align-items:center;gap:10px;padding:7px 0}.weight .wl{font-size:13px;width:56px;display:flex;align-items:center;gap:5px}.weight .wl i{font-size:15px;color:var(--green-500)}.weight input[type=range]{flex:1;accent-color:var(--green)}.weight .wv{font-size:13px;font-weight:500;width:26px;text-align:right}
+.sum{font-size:12px;color:var(--muted);text-align:right;margin-top:4px}.sum b{color:var(--green);font-weight:500}.sum.bad b{color:var(--danger)}
+.savebar{position:sticky;bottom:0;background:var(--page);padding:12px 0 6px;margin-top:14px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.savemsg{font-size:12.5px;color:var(--green)}
+.kset{font-size:11.5px;color:var(--green);flex-shrink:0}.kset.no{color:var(--hint)}
+.knote{font-size:12.5px;color:var(--muted);line-height:1.55;margin:2px 2px 8px}.knote b{color:var(--ink);font-weight:500}
+.klink{font-size:12px;color:var(--green);cursor:pointer;display:inline-flex;align-items:center;gap:4px}.klink i{font-size:13px}
+.muted{color:var(--hint);font-weight:400}
+.banner{background:var(--warn-bg);border:1px solid #fde3b0;color:var(--warn);border-radius:var(--r-card);padding:12px 14px;font-size:13px;line-height:1.55;margin-bottom:12px}.banner b{font-weight:600}
+</style>
+</head>
+<body>
+<div class="header">
+  <span class="brand"><i class="ti ti-leaf"></i>WHOAREYOU</span>
+  <div class="tabs">
+    <button class="tab on" data-tab="rec">추천</button>
+    <button class="tab" data-tab="set">설정</button>
+    <button class="tab" data-tab="stat">키 관리</button>
+  </div>
+</div>
+<div class="body">
+  <!-- 추천 -->
+  <div id="rec" class="panel">
+    <div class="search">
+      <i class="ti ti-search"></i>
+      <input id="q" placeholder="회사명·검색어 입력 후 Enter — 즉시 채점">
+      <button id="searchBtn" class="btn green">검색</button>
+    </div>
+    <div class="subbar">
+      <span id="subMeta" class="meta">불러오는 중…</span>
+      <button id="resetBtn" class="btn"><i class="ti ti-trash"></i>초기화</button>
+      <button id="collectBtn" class="btn"><i class="ti ti-refresh"></i>지금 검색</button>
+    </div>
+    <div id="loading" class="loading"><i class="ti ti-loader-2"></i><div style="margin-top:8px">수집·채점 중… (좋소는 매너있게 천천히)</div></div>
+    <div id="cards"></div>
+    <div id="empty" class="empty" style="display:none">
+      <div>아직 추천이 없어요. <b>[지금 검색]</b>으로 수집하세요.</div>
+      <div style="margin-top:14px;font-size:13px;line-height:1.9;text-align:left;display:inline-block">
+        처음이라면 3가지만 넣으면 채점이 시작돼요<br>
+        <span class="klink" onclick="switchTab('set')">① 집 주소 (설정)</span><br>
+        <span class="klink" onclick="switchTab('set')">② 이력서 PDF (설정)</span><br>
+        <span class="klink" onclick="switchTab('stat')">③ 카카오·ODsay 키 (키 관리)</span>
+      </div>
+    </div>
+  </div>
+  <!-- 설정 -->
+  <div id="set" class="panel hidden">
+    <div class="h3"><i class="ti ti-search"></i>검색 조건 · 필터</div>
+    <div class="field inline"><div class="k">검색 키워드</div><div class="v"><input id="s_keyword" class="tin" style="flex:1" placeholder="AI 엔지니어, 백엔드, 데이터 (쉼표로 여러 개)"></div></div>
+    <div class="field"><div class="k"></div><div class="v"><span class="na-t">쉼표로 여러 키워드 → 각각 검색해서 합쳐 가져옴 (개수 늘면 느려짐)</span></div></div>
+    <div class="field"><div class="k">지역</div><div class="v" data-group="regions">
+      <button class="fchip" data-val="서울 전체">서울 전체</button><button class="fchip" data-val="강남구">강남구</button><button class="fchip" data-val="서초구">서초구</button><button class="fchip" data-val="송파구">송파구</button><button class="fchip" data-val="경기">경기</button><button class="fchip" data-val="인천">인천</button><button class="fchip" data-val="대전">대전</button><button class="fchip" data-val="부산">부산</button></div></div>
+    <div class="field inline"><div class="k">경력</div><div class="v" data-group="career" data-single="1">
+      <button class="fchip" data-val="신입">신입</button><button class="fchip" data-val="경력">경력</button><button class="fchip" data-val="경력무관">경력무관</button></div></div>
+    <div class="field"><div class="k">학력</div><div class="v" data-group="edu">
+      <button class="fchip" data-val="학력무관">학력무관</button><button class="fchip" data-val="고졸">고졸</button><button class="fchip" data-val="초대졸">초대졸</button><button class="fchip" data-val="대졸">대졸</button><button class="fchip" data-val="석사">석사</button><button class="fchip" data-val="박사">박사</button></div></div>
+    <div class="field"><div class="k">고용형태</div><div class="v" data-group="emp_types">
+      <button class="fchip" data-val="정규직">정규직</button><button class="fchip" data-val="계약직">계약직</button><button class="fchip" data-val="인턴직">인턴직</button><button class="fchip" data-val="파견직">파견직</button><button class="fchip" data-val="프리랜서">프리랜서</button><button class="fchip" data-val="병역특례">병역특례</button></div></div>
+    <div class="field"><div class="k">기업형태</div><div class="v" data-group="comp_types">
+      <button class="fchip" data-val="대기업">대기업</button><button class="fchip" data-val="중견기업">중견기업</button><button class="fchip" data-val="중소기업">중소기업</button><button class="fchip" data-val="스타트업">스타트업</button><button class="fchip" data-val="외국계">외국계</button><button class="fchip" data-val="공사·공기업">공사·공기업</button><button class="fchip" data-val="연구소">연구소</button></div></div>
+    <div class="field inline"><div class="k">연봉 하한</div><div class="v"><select id="s_salary" class="sel"><option>회사내규</option><option>면접 후 결정</option><option>2,400만</option><option>2,600만</option><option>2,800만</option><option>3,000만</option><option>3,500만</option><option>4,000만 이상</option></select></div></div>
+    <div class="field inline"><div class="k">제외 키워드</div><div class="v"><input id="s_exclude" class="tin" style="flex:1" placeholder="쉼표로 구분 (예: 포괄임금, 계약직)"></div></div>
+
+    <div class="h3"><i class="ti ti-map-pin"></i>집 · 통근</div>
+    <div class="field inline"><div class="k">집 주소</div><div class="v" style="gap:8px"><input id="s_home" class="tin" style="flex:1"><button id="checkHomeBtn" class="btn" style="padding:6px 10px"><i class="ti ti-map-pin-check"></i>확인</button></div></div>
+    <div class="field"><div class="k"></div><div class="v"><span id="homeCheck" class="kset no" style="font-size:12px"></span></div></div>
+    <div class="field inline"><div class="k">최대 통근</div><div class="v" style="gap:10px;flex-wrap:nowrap"><input type="range" id="s_commute" min="20" max="120" step="5" style="flex:1;accent-color:var(--green)"><b id="s_commute_v" style="font-size:13px">50분</b></div></div>
+
+    <div class="h3"><i class="ti ti-adjustments"></i>신호 가중치 (합 100)</div>
+    <div class="weight"><span class="wl"><i class="ti ti-home"></i>통근</span><input type="range" id="w_commute" min="0" max="100" step="5"><span class="wv" id="w_commute_v">25</span></div>
+    <div class="weight"><span class="wl"><i class="ti ti-shield-half"></i>좋소</span><input type="range" id="w_jotso" min="0" max="100" step="5"><span class="wv" id="w_jotso_v">25</span></div>
+    <div class="weight"><span class="wl"><i class="ti ti-star"></i>평판</span><input type="range" id="w_rep" min="0" max="100" step="5"><span class="wv" id="w_rep_v">20</span></div>
+    <div class="weight"><span class="wl"><i class="ti ti-target"></i>매칭</span><input type="range" id="w_match" min="0" max="100" step="5"><span class="wv" id="w_match_v">30</span></div>
+    <div class="sum" id="w_sum">합계 100 / 100</div>
+
+    <div class="h3"><i class="ti ti-target-arrow"></i>추천 기준</div>
+    <div class="field inline"><div class="k">임계점</div><div class="v" style="gap:10px;flex-wrap:nowrap"><input type="range" id="s_threshold" min="50" max="95" step="5" style="flex:1;accent-color:var(--green)"><b id="s_threshold_v" style="font-size:13px">70점↑</b></div></div>
+    <div class="field inline"><div class="k">사이트당 수집</div><div class="v"><select id="s_per" class="sel"><option>5</option><option>10</option><option>20</option><option>30</option></select></div></div>
+
+    <div class="h3"><i class="ti ti-bell"></i>알림</div>
+    <div class="field inline"><div class="k">데스크톱</div><div class="v"><span class="tog" id="s_noti_desktop"></span></div></div>
+    <div class="field inline"><div class="k">카카오톡</div><div class="v" style="gap:8px;flex-wrap:wrap"><span class="tog" id="s_noti_kakao"></span><span id="kakaoState" class="kset no">미연결</span><button id="kakaoConnectBtn" class="btn" style="padding:5px 10px"><i class="ti ti-link"></i>연결</button><button id="kakaoTestBtn" class="btn" style="padding:5px 10px"><i class="ti ti-send"></i>테스트</button></div></div>
+    <div class="field inline"><div class="k">카톡 시크릿</div><div class="v"><input id="k_kakao_secret" class="tin" style="flex:1" placeholder="(선택) 콘솔 [보안] Client Secret 켜놨으면 입력"><span class="kset" id="k_kakao_secret_s"></span></div></div>
+    <div class="field"><div class="k"></div><div class="v"><span style="font-size:11.5px;color:var(--hint);line-height:1.55">※ 1회 설정: 콘솔 <b>카카오 로그인 ON</b> · Redirect URI <b>http://localhost:8599/oauth</b> · 동의항목 <b>카카오톡 메시지 전송</b>. ⚠ "Bad client credentials" 뜨면 <b>[보안] Client Secret을 '사용 안 함'</b>으로 하거나 위 칸에 시크릿 입력. 그 뒤 [연결].</span></div></div>
+    <div class="field inline"><div class="k">수집·알림 주기</div><div class="v" style="gap:6px">매 <input id="s_interval_n" class="tin" type="number" min="1" style="width:70px"> <select id="s_interval_u" class="sel"><option value="60">시간</option><option value="1">분</option></select> 마다 <span id="s_interval_lbl" class="na-t"></span></div></div>
+    <div class="field inline"><div class="k">조용 시간</div><div class="v"><input id="s_quiet" class="tin" style="width:140px" placeholder="23:00~08:00"><span class="na-t">이 시간엔 알림 안 옴</span></div></div>
+    <div class="field inline"><div class="k">이력서</div><div class="v" style="gap:9px"><span id="resumeName" style="font-size:13px;flex:1;color:var(--muted)">선택 안 됨</span><button id="pickResumeBtn" class="btn"><i class="ti ti-file-cv"></i>PDF 선택</button></div></div>
+
+    <div class="savebar"><button id="saveBtn" class="btn green"><i class="ti ti-device-floppy"></i>설정 저장</button><span class="savemsg" id="saveMsg"></span></div>
+  </div>
+  <!-- 키 관리 -->
+  <div id="stat" class="panel hidden">
+    <div class="h3"><i class="ti ti-key"></i>API 키 관리</div>
+    <div class="knote">통근(카카오·ODsay)·좋소(선택) 기능에 쓰는 키. <b>비우면 저장된 값 유지</b>, 입력 후 저장하면 교체. 키는 이 PC에만 저장됨.</div>
+    <div class="field inline"><div class="k">카카오 REST키</div><div class="v"><input id="k_kakao" class="tin" style="flex:1" placeholder="REST API 키 (⚠ JavaScript 키 아님)"><span class="kset" id="k_kakao_s"></span></div></div>
+    <div class="field"><div class="k"></div><div class="v"><span class="na-t">지도(주소→좌표·통근) + 카톡 로그인(OAuth) 둘 다 이 키 하나 · 콘솔 [앱 키]의 <b>REST API 키</b> 복사</span></div></div>
+    <div class="field"><div class="k"></div><div class="v"><span class="klink" onclick="api().open_url('https://developers.kakao.com')">발급 → developers.kakao.com <i class="ti ti-external-link"></i></span></div></div>
+    <div class="field inline"><div class="k">ODsay</div><div class="v"><input id="k_odsay" class="tin" style="flex:1" placeholder="대중교통 경로 키 — 통근 시간"><span class="kset" id="k_odsay_s"></span></div></div>
+    <div class="field"><div class="k"></div><div class="v"><span class="klink" onclick="api().open_url('https://lab.odsay.com')">발급 → lab.odsay.com <i class="ti ti-external-link"></i></span></div></div>
+    <div class="savebar"><button id="saveKeysBtn" class="btn green"><i class="ti ti-device-floppy"></i>키 저장</button><span class="savemsg" id="keysMsg"></span></div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

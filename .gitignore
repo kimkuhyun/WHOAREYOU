@@ -11,6 +11,8 @@ wheels/
 
 # 로컬 데이터 — API 키(UserSetting), 수집된 잡/회사/리뷰 등 민감 정보 포함
 data/
+user_settings.json
+app/user_settings.json
 *.db
 *.sqlite
 *.sqlite3
