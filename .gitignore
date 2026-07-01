@@ -31,3 +31,8 @@ dumps/
 
 # 개발 문서(로컬 SoT — 공개 저장소 제외)
 CLAUDE.md
+
+# 인스톨러 빌드 산출물(로컬 전용 — 바이너리)
+uv.exe
+Output/
+*_setup.exe

@@ -84,13 +84,15 @@ flowchart LR
 
 ## 🚀 실행
 
+**설치형(권장)** — `WHOAREYOU_setup.exe` 하나면 됩니다. 설치 중 라이브러리와 AI 모델(리랭커·OCR)을 자동으로 받아 구성해서, 별도 Python 없이 바로 완전한 기능으로 돌아갑니다. (최초 1회 약 3GB·인터넷 필요)
+
 ```bash
 # 개발 실행
 uv sync
 .venv\Scripts\python run.py
 
-# 배포용 exe 빌드
-.venv\Scripts\pyinstaller whoareyou.spec   # → dist\WHOAREYOU\WHOAREYOU.exe
+# 설치형 빌드 (원클릭 인스톨러 — 리랭커·OCR 포함)
+ISCC setup.iss   # 루트에 uv.exe 배치 후 → Output\WHOAREYOU_setup.exe
 ```
 
 첫 실행 뒤 **키 관리** 탭에 카카오 REST 키를, **설정** 탭에 이력서와 집 주소를 넣으면 끝입니다.
