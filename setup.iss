@@ -1,4 +1,4 @@
-; WHOAREYOU 2.0 인스톨러 (Inno Setup) — 원클릭 완전 기능(리랭커/OCR 포함)
+﻿; WHOAREYOU 2.0 인스톨러 (Inno Setup) — 원클릭 완전 기능(리랭커/OCR 포함)
 ; 배포 모델: 경량 exe가 아니라 "소스 + uv 부트스트랩(실 Python)"으로 구동해야 heavy deps가 산다.
 ; 빌드: (repo 루트에 uv.exe 배치) → ISCC setup.iss → Output\WHOAREYOU_setup.exe
 ; 설치 시: 파일 복사 → bootstrap.ps1(uv venv + requirements + bge-reranker/easyocr 모델 워밍) → 완료

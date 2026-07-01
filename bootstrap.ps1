@@ -1,4 +1,4 @@
-# WHOAREYOU 2.0 최초 구성 — uv로 격리 Python + 의존성 + AI 모델 설치.
+﻿# WHOAREYOU 2.0 최초 구성 — uv로 격리 Python + 의존성 + AI 모델 설치.
 # 인스톨러가 설치 막바지에 1회 실행(콘솔로 진행 표시). 실패해도 첫 실행 때 자동 재시도.
 param([string]$AppDir = $PSScriptRoot)
 $ErrorActionPreference = "Continue"
