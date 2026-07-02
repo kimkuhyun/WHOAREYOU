@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""저장소 — 추천/상태를 SQLite에 보관(본 공고·지원함·관심없음 dedup, 랭킹 조회)."""
+"""저장소 — 추천/상태를 SQLite에 보관(본 공고·제외 dedup, 랭킹 조회)."""
 import json
 import sqlite3
 import threading
@@ -14,14 +14,15 @@ class Store:
         self.con.execute(
             "CREATE TABLE IF NOT EXISTS reco("
             "url TEXT PRIMARY KEY, data TEXT, status TEXT DEFAULT 'new', ts REAL)")
+        self.con.execute("UPDATE reco SET status='not_interested' WHERE status='applied'")
         self.con.commit()
         self._lock = threading.Lock()
 
     def is_handled(self, url: str) -> bool:
-        """지원함·관심없음이면 다시 안 보여줌(선스킵)."""
+        """제외한 공고면 다시 안 보여줌(선스킵)."""
         with self._lock:
             r = self.con.execute("select status from reco where url=?", (url,)).fetchone()
-        return bool(r and r[0] in ("applied", "not_interested"))
+        return bool(r and r[0] == "not_interested")
 
     def save(self, reco: dict) -> None:
         with self._lock:
@@ -58,7 +59,7 @@ class Store:
 
     def prune_new(self, keep_urls) -> int:
         """이번 실행에 없는 'new' 추천 삭제 → 목록이 항상 최신 검색만 반영.
-        (지원함·관심없음은 이력이라 보존). 반환=삭제 건수."""
+        (제외한 공고는 이력이라 보존). 반환=삭제 건수."""
         keep = set(keep_urls or [])
         with self._lock:
             rows = self.con.execute("select url from reco where status='new'").fetchall()
@@ -71,5 +72,5 @@ class Store:
     def counts(self) -> dict:
         with self._lock:
             total = self.con.execute("select count(*) from reco").fetchone()[0]
-            applied = self.con.execute("select count(*) from reco where status='applied'").fetchone()[0]
-        return {"total": total, "applied": applied}
+            excluded = self.con.execute("select count(*) from reco where status='not_interested'").fetchone()[0]
+        return {"total": total, "excluded": excluded}

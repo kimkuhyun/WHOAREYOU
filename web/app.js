@@ -43,14 +43,13 @@ function jotsoVal(score, label) {
 function firstTok(s, sep) { return s ? esc(String(s).split(sep)[0]) : '-'; }
 
 function card(r) {
-  const done = r.status === 'applied';
   const repOk = !!(r.rep_d && r.rep_d.startsWith('★'));
   const rep = repOk ? esc(r.rep_d.split(' ')[0]) : NA;
   const jotsoNa = r.jotso_score == null;
   const comOk = r.commute != null;                     // 정규화된 통근 점수 있으면 좌표 확보됨
   const com = comOk ? firstTok(r.commute_d, '/') : `<span class="na-t">${esc(r.commute_d || '표본 부족')}</span>`;
   const matchOk = r.match != null;
-  return `<div class="card ${done ? 'done' : ''}" data-url="${esc(r.url)}">
+  return `<div class="card" data-url="${esc(r.url)}">
     <div class="crow"><div class="cmain"><div class="co">${r.source ? `<span class="site">${esc(r.source)}</span>` : ''}${esc(r.company)} ${r.title ? `<span class="role">· ${esc(r.title)}</span>` : ''}</div></div>
       <div class="fit"><div class="n">${r.total ?? '-'}</div><div class="l">적합도</div></div></div>
     <div class="axes">
@@ -61,8 +60,7 @@ function card(r) {
     </div>
     <div class="meta2">${r.commute_d ? `<span>${esc(r.commute_d)}</span>` : ''}${r.rep_d ? `<span>${esc(r.rep_d)}</span>` : ''}</div>
     <div class="acts">
-      <button class="btn" onclick="mark(this,'not_interested')"><i class="ti ti-thumb-down"></i>관심 없음</button>
-      <button class="btn" onclick="mark(this,'applied')"><i class="ti ti-check"></i>지원함</button>
+      <button class="btn" title="이 공고를 목록에서 지우고 다시 수집·알림하지 않아요" onclick="mark(this,'not_interested')"><i class="ti ti-eye-off"></i>제외하기</button>
       <button class="btn primary" onclick="api().open_url('${esc(r.url)}')">공고 바로가기 <i class="ti ti-external-link"></i></button>
     </div></div>`;
 }
@@ -125,9 +123,9 @@ function render(recos, threshold, opts) {
   const s = opts.stats || {}, q = opts.query;
   let sub = '';
   if (opts.note) sub = opts.note + ' · ';
-  else if (q && q.keyword) {
+  if (q && q.keyword) {
     const bits = [q.career, ...(q.regions || [])].filter(Boolean).join('·');
-    sub = `「${esc(q.keyword)}」${bits ? ` <span class="muted">${esc(bits)}</span>` : ''} · `;
+    sub += `「${esc(q.keyword)}」${bits ? ` <span class="muted">${esc(bits)}</span>` : ''} · `;
   }
   if (s.crawled != null) sub += `<span class="muted">수집 ${s.crawled}→조건 ${s.filtered}→</span> `;
   sub += `추천 <b>${above.length}</b>건`;
@@ -162,13 +160,42 @@ function setLoading(on) {
   else stopTick();
 }
 
-async function loadRecos() {
+async function loadRecos(note) {
   try {
     const r = await api().recommendations();
     if (r.threshold != null) curThreshold = r.threshold;
-    render(r.recos, r.threshold);
+    // 백엔드가 재시작 후에도 주는 퍼널·검색줄(stats/query)을 그대로 표시(이전엔 버렸음)
+    render(r.recos, r.threshold, { stats: r.stats, query: r.query, note: note });
   } catch (e) { onErr(e, '추천 불러오기'); }
 }
+
+function canBackgroundRefresh() {
+  return _booted
+    && !$('rec').classList.contains('hidden')
+    && !$('loading').classList.contains('on')
+    && document.activeElement !== $('q');
+}
+
+// ── Python 푸시 훅(run.py evaluate_js) — 자동/트레이 수집을 열린 창에 반영 ──
+// async 아님 + return 없음: pywebview evaluate_js가 Promise를 기다리지 않게
+window.pyAutoStart = function () {
+  if ($('loading').classList.contains('on')) return;   // 수동 수집 중이면 그쪽 표시 유지
+  subMsg('자동 수집 중… 끝나면 여기 갱신돼요');
+};
+window.pyAutoDone = function () {
+  if ($('loading').classList.contains('on')) return;   // 수동 수집 진행 중 — 그쪽 응답이 렌더
+  const t = new Date(), p = (n) => String(n).padStart(2, '0');
+  loadRecos(`자동 수집 ${p(t.getHours())}:${p(t.getMinutes())}`);
+};
+window.pyShown = function () {                          // 트레이에서 창 열 때 최신화
+  if ($('loading').classList.contains('on')) return;
+  loadRecos();
+};
+
+// pywebview 푸시가 누락돼도 열린 추천 화면은 1분 안에 최신 DB 상태를 다시 읽는다.
+setInterval(() => {
+  if (canBackgroundRefresh()) loadRecos();
+}, 60000);
 
 async function collect() {
   setLoading(true);
@@ -203,13 +230,11 @@ async function resetSearch() {
 async function mark(btn, status) {
   const c = btn.closest('.card');
   const url = c.dataset.url;
-  // §7 성공했을 때만 카드 변경 — 실패 시 원복
-  const wasDone = c.classList.contains('done');
   try {
-    await api().set_status(url, status);
-    if (status === 'not_interested') c.remove(); else c.classList.add('done');
+    const ok = await api().set_status(url, status);
+    if (ok === false) throw new Error('status rejected');
+    await loadRecos();   // 저장된 상태로 재렌더 — 제외한 공고는 목록에서 사라짐
   } catch (e) {
-    if (!wasDone) c.classList.remove('done');   // 낙관적 변경 없었지만 방어적 원복
     subMsg('처리 실패 — 다시 눌러주세요');
     console.error('[WHOAREYOU] mark', e);
   }

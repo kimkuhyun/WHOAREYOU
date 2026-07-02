@@ -241,12 +241,17 @@ class Api:
         return {"ok": True, "cleared": self.store.clear()}
 
     def set_status(self, url, status):
-        self.store.set_status(url, status)   # applied | not_interested
+        # not_interested=목록에서 제외 + 재수집·재알림 안 함. applied는 구버전 호환용으로 같은 제외 상태로 정규화.
+        if status == "applied":
+            status = "not_interested"
+        if status not in ("not_interested", "new"):
+            return False
+        self.store.set_status(url, status)
         return True
 
     def status(self):
         c = self.store.counts()
-        return {"last_run": self.last_run, "total": c["total"], "applied": c["applied"],
+        return {"last_run": self.last_run, "total": c["total"], "excluded": c["excluded"],
                 "keyword": self.user.data.get("keyword"),
                 "schedule": self._interval_label(self.user.data.get("schedule_interval", 1440))}
 

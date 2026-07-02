@@ -146,7 +146,7 @@ class Saramin(_Adapter):
                 continue
             rec = m.group(1)
             view = f"{self.BASE}/zf_user/jobs/view?rec_idx={rec}"
-            if view in seen or (skip and skip(view)):     # 중복·이미 처리(지원함/관심없음) → 스캔 전 제외
+            if view in seen or (skip and skip(view)):     # 중복·이미 제외한 공고 → 스캔 전 제외
                 continue
             seen.add(view)
             corp = it.cssselect(".corp_name a, .area_corp .corp_name, .area_corp a")
@@ -224,7 +224,7 @@ class Jobkorea(_Adapter):
             if len(out) >= n or scanned >= cap:
                 break
             gurl = f"{self.BASE}/Recruit/GI_Read/{g}"
-            if skip and skip(gurl):          # 이미 처리(지원함/관심없음) → 스캔 전 제외
+            if skip and skip(gurl):          # 이미 제외한 공고 → 스캔 전 제외
                 continue
             try:
                 rd = await self.c.get(gurl)

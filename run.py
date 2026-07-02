@@ -40,6 +40,29 @@ _quitting = False
 def _show(icon=None, item=None):
     if _window is not None:
         _window.show()
+        _js("window.pyShown && window.pyShown()")   # 숨겨진 사이 갱신됐을 수 있음 → 열 때 최신화
+
+
+def _js(code: str) -> None:
+    """열린 창에 JS 푸시 — 백그라운드 스레드(APScheduler·트레이)에서 호출해도 안전. 창 없으면 무시."""
+    try:
+        if _window is not None:
+            _window.evaluate_js(code)
+    except Exception:
+        pass
+
+
+def _collect_and_refresh():
+    """스케줄·트레이 공용 수집 — 끝나면 열린 창 목록도 갱신.
+    (자동 수집이 카톡만 보내고 화면은 옛 결과로 남던 문제 수정 — UI는 부팅/수동시만 렌더했음)"""
+    _js("window.pyAutoStart && window.pyAutoStart()")
+    try:
+        res = _api._collect()
+    except Exception:
+        res = None
+    if res and res.get("busy"):
+        return          # 수동 수집이 진행 중 — 그쪽 응답이 렌더하므로 여기선 침묵
+    _js("window.pyAutoDone && window.pyAutoDone()")
 
 
 def _on_closing():
@@ -52,7 +75,7 @@ def _on_closing():
 
 def _collect_now(icon=None, item=None):
     _show()
-    threading.Thread(target=_api._collect, daemon=True).start()   # 수동 수집
+    threading.Thread(target=_collect_and_refresh, daemon=True).start()   # 수동 수집(끝나면 창 갱신)
 
 
 def _quit(icon, item):
@@ -80,7 +103,7 @@ def main() -> None:
                                     width=740, height=940, min_size=(560, 600))
     _window.events.closing += _on_closing
 
-    scheduler = Scheduler(_api._collect,
+    scheduler = Scheduler(_collect_and_refresh,
                           interval_min=_api.user.data.get("schedule_interval", 1440))
     scheduler.start()
     _api.scheduler = scheduler          # 설정에서 주기 변경 시 재스케줄용

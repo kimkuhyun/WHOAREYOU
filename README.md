@@ -68,7 +68,7 @@ flowchart LR
   KW["검색어 · 필터"]:::e --> SA["사람인"]:::s
   KW --> JK["잡코리아"]:::s
   KW --> WT["원티드"]:::s
-  SA --> DD["URL 중복 제거<br/>지원함·관심없음 스킵"]
+  SA --> DD["URL 중복 제거<br/>제외한 공고 스킵"]
   JK --> DD
   WT --> DD
   DD --> SC["네 축 채점"]
