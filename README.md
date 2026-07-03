@@ -20,13 +20,15 @@
 
 ---
 
-## 🖼️ 미리보기
+## 🖼️ 미리보기 — 설치 없이 30초면 파악됩니다
 
-| 추천 — 통근·좋소·평판·매칭 네 축이 주인공 | 설정 — 검색 필터 |
+조건을 한 번 넣어두면 트레이에서 주기적으로 수집·채점하고, 임계점을 넘는 공고만 토스트·카카오톡으로 알려줍니다. 설치하지 않아도 아래 화면만 보면 어떻게 도는지 다 보입니다.
+
+| ① 설정 — 검색어·필터·가중치 | ② 추천 — 통근·좋소·평판·매칭 네 축 채점 |
 |:---:|:---:|
-| ![추천](docs/img/recommend.png) | ![설정](docs/img/settings.png) |
-| **키 관리 — 카카오·ODsay, 내 PC에만 저장** | **알림 — 트레이 토스트** |
-| ![키 관리](docs/img/keys.png) | ![토스트](docs/img/toast.png) |
+| ![설정](docs/img/settings.png) | ![추천](docs/img/recommend.png) |
+| **③ 알림 — 임계점 넘으면 토스트** | **키 관리 — 카카오·ODsay, 내 PC에만 저장** |
+| ![토스트](docs/img/toast.png) | ![키 관리](docs/img/keys.png) |
 
 ---
 
@@ -84,7 +86,9 @@ flowchart LR
 
 ## 🚀 실행
 
-**설치형(권장)** — `WHOAREYOU_setup.exe` 하나면 됩니다. 설치 중 라이브러리와 AI 모델(리랭커·OCR)을 자동으로 받아 구성해서, 별도 Python 없이 바로 완전한 기능으로 돌아갑니다. (최초 1회 약 3GB·인터넷 필요)
+**설치형(권장)** — [Releases](https://github.com/kimkuhyun/WHOAREYOU/releases)의 `WHOAREYOU_setup.exe` 하나면 됩니다. 설치 중 라이브러리와 AI 모델(리랭커·OCR)을 자동으로 받아 구성해서, 별도 Python 없이 바로 완전한 기능으로 돌아갑니다. (최초 1회 약 3GB·인터넷 필요)
+
+> 🛡️ 처음 실행하면 Windows SmartScreen이 "Windows의 PC 보호" 파란 창을 띄웁니다. 개인 개발자라 코드서명 인증서가 없어서 뜨는 경고입니다 — **[추가 정보] → [실행]**을 누르면 됩니다.
 
 ```bash
 # 개발 실행
