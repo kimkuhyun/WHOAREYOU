@@ -11,10 +11,11 @@ DEFAULTS = {
     "weights": dict(config.WEIGHTS),
     # 필터 taxonomy (검색어 위주 · 크롤 반영은 점진). 직무는 제거 = 검색어로 대체
     "regions": ["서울 전체", "경기"],
-    "career": "신입",
+    "career": ["신입", "경력무관"],   # 멀티선택(신입·경력·경력무관 조합). 빈 리스트 = 경력 무필터
     "edu": ["대졸", "석사", "박사"],          # 멀티선택(학력무관·고졸·초대졸·대졸·석사·박사)
     "emp_types": ["정규직"],
     "comp_types": ["중견기업", "중소기업", "스타트업"],
+    "skills": [],                      # 기술스택(최대 5) — 3사 본문 필터(동의어 사전) + 원티드 서버 skill_tags
     "salary_min": "3,000만",
     "exclude": ["포괄임금", "계약직"],
     "home_address": "",
@@ -70,6 +71,11 @@ class UserSettings:
                 self.data.update(json.loads(self.path.read_text(encoding="utf-8")))
             except Exception:
                 pass
+        # 구버전 career 단일 문자열 → 멀티선택 리스트 (기존 동작 보존: 신입/경력은 무관 공고도 통과였음)
+        car = self.data.get("career")
+        if isinstance(car, str):
+            self.data["career"] = {"신입": ["신입", "경력무관"],
+                                   "경력": ["경력", "경력무관"]}.get(car, [])
 
     def get(self) -> dict:
         """UI로 반환 — 키 원문은 숨기고 설정여부(keys_set)만 노출."""

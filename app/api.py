@@ -84,7 +84,8 @@ class Api:
             self.pipeline.scorer.w = u.get("weights", config.WEIGHTS)      # 가중치 반영
             filters = ({"career": u.get("career"), "regions": u.get("regions"),
                         "emp_types": u.get("emp_types"), "edu": u.get("edu"),
-                        "comp_types": u.get("comp_types")} if use_filters else None)
+                        "comp_types": u.get("comp_types"),
+                        "skills": u.get("skills")} if use_filters else None)
             kw = keyword or u.get("keyword") or config.KEYWORD
             keywords = [k.strip() for k in str(kw).split(",") if k.strip()] or [config.KEYWORD]
             agg = {"crawled": 0, "filtered": 0, "shown": 0}

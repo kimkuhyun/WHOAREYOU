@@ -111,9 +111,11 @@ body{margin:0;background:var(--page);font-family:Pretendard,system-ui,sans-serif
     <div class="h3"><i class="ti ti-search"></i>검색 조건 · 필터</div>
     <div class="field inline"><div class="k">검색 키워드</div><div class="v"><input id="s_keyword" class="tin" style="flex:1" placeholder="AI 엔지니어, 백엔드, 데이터 (쉼표로 여러 개)"></div></div>
     <div class="field"><div class="k"></div><div class="v"><span class="na-t">쉼표로 여러 키워드 → 각각 검색해서 합쳐 가져옴 (개수 늘면 느려짐)</span></div></div>
+    <div class="field inline"><div class="k">기술스택</div><div class="v"><input id="s_skills" class="tin" style="flex:1" placeholder="Python, PyTorch, 머신러닝 (쉼표로 최대 5개 · 비우면 미적용)"></div></div>
+    <div class="field"><div class="k"></div><div class="v"><span class="na-t">공고 본문에 스택이 있어야 통과(동의어 인식) · 원티드는 서버 필터로도 적용</span></div></div>
     <div class="field"><div class="k">지역</div><div class="v" data-group="regions">
       <button class="fchip" data-val="서울 전체">서울 전체</button><button class="fchip" data-val="강남구">강남구</button><button class="fchip" data-val="서초구">서초구</button><button class="fchip" data-val="송파구">송파구</button><button class="fchip" data-val="경기">경기</button><button class="fchip" data-val="인천">인천</button><button class="fchip" data-val="대전">대전</button><button class="fchip" data-val="부산">부산</button></div></div>
-    <div class="field inline"><div class="k">경력</div><div class="v" data-group="career" data-single="1">
+    <div class="field inline"><div class="k">경력</div><div class="v" data-group="career">
       <button class="fchip" data-val="신입">신입</button><button class="fchip" data-val="경력">경력</button><button class="fchip" data-val="경력무관">경력무관</button></div></div>
     <div class="field"><div class="k">학력</div><div class="v" data-group="edu">
       <button class="fchip" data-val="학력무관">학력무관</button><button class="fchip" data-val="고졸">고졸</button><button class="fchip" data-val="초대졸">초대졸</button><button class="fchip" data-val="대졸">대졸</button><button class="fchip" data-val="석사">석사</button><button class="fchip" data-val="박사">박사</button></div></div>

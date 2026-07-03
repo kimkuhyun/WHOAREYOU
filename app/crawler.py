@@ -9,7 +9,7 @@ from urllib.parse import quote
 from lxml import html as LH
 
 import config
-from jobfilter import passes as _passes
+from jobfilter import _EDU_ORDER, career_set as _career_set, passes as _passes
 
 
 @dataclass
@@ -24,7 +24,7 @@ class Job:
     lng: float | None = None
     is_image: bool = False
     career: str = ""      # "신입"|"경력"|"무관"|""  — 3사 상세 구조화 필드에서
-    emp_type: str = ""    # "정규직"|"인턴직"|"계약직"… (정규화된 한글 라벨)
+    emp_type: str = ""    # 고용형태 — 정규화 라벨(사람인·원티드) 또는 원문 병기(잡코리아 "정규직, 계약직 FULL_TIME"). jobfilter.emp_set이 집합으로 판정
     edu_req: str = ""     # 요구 학력 정규화: "학력무관"|"고졸"|"초대졸"|"대졸"|"석사"|"박사"|""
     comp_type: str = ""   # 기업형태 원문(사람인 dl — "중소기업, 연구소" 등)
     img_urls: list = field(default_factory=list)   # 이미지 공고 본문 이미지 URL들(전부 OCR)
@@ -114,102 +114,144 @@ class _Adapter:
 
 class Saramin(_Adapter):
     BASE = "https://www.saramin.co.kr"
-    EXP = {"신입": "1", "경력": "2"}   # exp_cd (실측). 경력무관=미지정
     # 고용형태 job_type=X (⚠ 대괄호 없이! job_type[]는 값 무시됨 — 실측). 정규직=1·계약=2·인턴=4…
     JOB_TYPE = {"정규직": "1", "계약직": "2", "인턴직": "4", "파견직": "6",
                 "프리랜서": "9", "병역특례": "3", "아르바이트": "5", "위촉직": "8"}
-    # ⚠ 학력(edu_max)은 동작 불규칙 → 학력은 클라측 필터로. 지역(loc)도 JS라 클라측.
+    MAX_PAGES = 3    # 페이지네이션(100장/page) — 목표 미달·cap 미도달 시 다음 페이지
+    # 지역(loc)은 JS라 클라측.
+
+    def _server_params(self, f: dict) -> list[str]:
+        """실측 검증된 서버측 선필터(2026-07-03). 미검증 조합은 미전송 → 클라측 안전망."""
+        p = []
+        cars = _career_set(f.get("career"))
+        if "신입" in cars and "경력" not in cars:
+            p.append("exp_cd=1")             # 사람인 신입 풀은 경력무관 포함(exp_none 병기와 동수 792건 실측)
+        elif cars == {"경력"}:
+            p.append("exp_cd=2")
+        elif cars == {"무관"}:
+            p.append("exp_none=y")           # 경력무관만(527건 실측). ⚠ exp_cd=2&exp_none=y 조합은 깨짐(전체 반환)
+        edus = f.get("edu") or []
+        if edus:
+            lv = max((_EDU_ORDER.get(e, 0) for e in edus), default=0)
+            if lv <= 0:
+                p.append("edu_none=y")       # 학력무관만(100% 무관 실측)
+            else:                            # 요구 ≤ 사용자 최대: edu_max=8+레벨(9=고졸↓·11=대졸↓·12=석사↓ 실측)
+                p.append(f"edu_none=y&edu_min=6&edu_max={8 + lv}")
+        emps = f.get("emp_types") or []
+        if len(emps) == 1 and emps[0] in self.JOB_TYPE:              # 고용형태: 단일일 때만 서버측
+            p.append(f"job_type={self.JOB_TYPE[emps[0]]}")          # (복수 job_type은 깨짐 → 클라측)
+        return p
 
     async def fetch(self, kw: str, n: int, filters: dict | None = None, skip=None) -> list[Job]:
         out: list[Job] = []
         cap = max(config.SCAN_CAP, n * config.SCAN_PER_TARGET)   # 목표(n) 비례 스캔 깊이
         f = filters or {}
-        params = ["searchType=search", f"searchword={quote(kw)}",
-                  "recruitPage=1", "recruitPageCount=100", "recruitSort=relation"]
-        if self.EXP.get(f.get("career", "")):                        # 경력(서버측)
-            params.append(f"exp_cd={self.EXP[f['career']]}")
-        emps = f.get("emp_types") or []
-        if len(emps) == 1 and emps[0] in self.JOB_TYPE:              # 고용형태: 단일일 때만 서버측
-            params.append(f"job_type={self.JOB_TYPE[emps[0]]}")     # (복수 job_type은 깨짐 → 클라측)
-        url = f"{self.BASE}/zf_user/search/recruit?" + "&".join(params)
-        tree = LH.fromstring((await self.c.get(url)).text)
+        base = ["searchType=search", f"searchword={quote(kw)}",
+                "recruitPageCount=100", "recruitSort=relation"] + self._server_params(f)
         seen: set[str] = set()
         scanned = 0
-        for it in tree.cssselect(".item_recruit"):
-            if len(out) >= n or scanned >= cap:   # 필터 통과분 n개 채우면 끝(cap=목표 비례 깊이)
+        for page in range(1, self.MAX_PAGES + 1):
+            if len(out) >= n or scanned >= cap:
                 break
-            a = it.cssselect(".job_tit a, .area_job a")
-            if not a:
-                continue
-            m = re.search(r"rec_idx=(\d+)", a[0].get("href") or "")
-            if not m:
-                continue
-            rec = m.group(1)
-            view = f"{self.BASE}/zf_user/jobs/view?rec_idx={rec}"
-            if view in seen or (skip and skip(view)):     # 중복·이미 제외한 공고 → 스캔 전 제외
-                continue
-            seen.add(view)
-            corp = it.cssselect(".corp_name a, .area_corp .corp_name, .area_corp a")
-            try:
-                dt = LH.fromstring((await self.c.get(view)).text)
-            except Exception:
-                continue
-            scanned += 1
-            lat = lng = addr = None
-            mp = dt.cssselect("#map_0, .jv_cont.jv_location")
-            if mp:
-                lat, lng, addr = mp[0].get("data-latitude"), mp[0].get("data-longitude"), mp[0].get("data-address")
-            if not addr:
-                ad = dt.cssselect("address.address span.spr_jview.txt_adr, span.spr_jview.txt_adr")
-                if ad:
-                    addr = ad[0].text_content().strip()
-            uc = dt.cssselect(".user_content")
-            jd = uc[0].text_content().strip() if uc else ""
-            is_img = bool(uc) and len(jd) < 300 and len(uc[0].cssselect("img")) >= 1
-            # 상세 요약 dl(경력·학력·근무형태·기업형태) = 구조화 필드
-            summ = {}
-            for dl in dt.cssselect("div.jv_summary dl"):
-                for k, v in zip(dl.cssselect("dt"), dl.cssselect("dd")):
-                    summ[k.text_content().strip()] = v.text_content().strip()
-            title = a[0].text_content().strip()
-            img_urls = []
-            # 이미지 공고: OCR용 이미지 URL 전부 확보 + 제목/직무 폴백(OCR 꺼졌거나 실패 시)
-            match_jd = jd
-            if is_img:
-                match_jd = f"{title} {summ.get('직무', '')} {jd}".strip()
-                for im in uc[0].cssselect("img"):
-                    src = im.get("src") or im.get("data-src") or ""
-                    if src.startswith("//"):
-                        src = "https:" + src
-                    elif src.startswith("/"):
-                        src = self.BASE + src
-                    if src.startswith("http") and src not in img_urls:
-                        img_urls.append(src)
-            job = Job("사람인", title,
-                      corp[0].text_content().strip() if corp else "",
-                      view, match_jd, addr or "",
-                      float(lat) if lat else None, float(lng) if lng else None, is_img,
-                      career=_career_from_field(summ.get("경력", "")),
-                      emp_type=_norm_emp(summ.get("근무형태", "")),
-                      edu_req=_norm_edu(summ.get("학력", "")),
-                      comp_type=summ.get("기업형태", ""), img_urls=img_urls)
-            if _passes(job, filters):                          # 필터 통과분만 수집
-                out.append(job)
+            url = f"{self.BASE}/zf_user/search/recruit?" + "&".join(base + [f"recruitPage={page}"])
+            tree = LH.fromstring((await self.c.get(url)).text)
+            cards = tree.cssselect(".item_recruit")
+            if not cards:
+                break                                       # 공급 끝(다음 페이지 없음)
+            for it in cards:
+                if len(out) >= n or scanned >= cap:   # 필터 통과분 n개 채우면 끝(cap=목표 비례 깊이)
+                    break
+                a = it.cssselect(".job_tit a, .area_job a")
+                if not a:
+                    continue
+                m = re.search(r"rec_idx=(\d+)", a[0].get("href") or "")
+                if not m:
+                    continue
+                rec = m.group(1)
+                view = f"{self.BASE}/zf_user/jobs/view?rec_idx={rec}"
+                if view in seen or (skip and skip(view)):     # 중복·이미 제외한 공고 → 스캔 전 제외
+                    continue
+                seen.add(view)
+                corp = it.cssselect(".corp_name a, .area_corp .corp_name, .area_corp a")
+                try:
+                    dt = LH.fromstring((await self.c.get(view)).text)
+                except Exception:
+                    continue
+                scanned += 1
+                lat = lng = addr = None
+                mp = dt.cssselect("#map_0, .jv_cont.jv_location")
+                if mp:
+                    lat, lng, addr = mp[0].get("data-latitude"), mp[0].get("data-longitude"), mp[0].get("data-address")
+                if not addr:
+                    ad = dt.cssselect("address.address span.spr_jview.txt_adr, span.spr_jview.txt_adr")
+                    if ad:
+                        addr = ad[0].text_content().strip()
+                uc = dt.cssselect(".user_content")
+                jd = uc[0].text_content().strip() if uc else ""
+                is_img = bool(uc) and len(jd) < 300 and len(uc[0].cssselect("img")) >= 1
+                # 상세 요약 dl(경력·학력·근무형태·기업형태) = 구조화 필드
+                summ = {}
+                for dl in dt.cssselect("div.jv_summary dl"):
+                    for k, v in zip(dl.cssselect("dt"), dl.cssselect("dd")):
+                        summ[k.text_content().strip()] = v.text_content().strip()
+                title = a[0].text_content().strip()
+                img_urls = []
+                # 이미지 공고: OCR용 이미지 URL 전부 확보 + 제목/직무 폴백(OCR 꺼졌거나 실패 시)
+                match_jd = jd
+                if is_img:
+                    match_jd = f"{title} {summ.get('직무', '')} {jd}".strip()
+                    for im in uc[0].cssselect("img"):
+                        src = im.get("src") or im.get("data-src") or ""
+                        if src.startswith("//"):
+                            src = "https:" + src
+                        elif src.startswith("/"):
+                            src = self.BASE + src
+                        if src.startswith("http") and src not in img_urls:
+                            img_urls.append(src)
+                job = Job("사람인", title,
+                          corp[0].text_content().strip() if corp else "",
+                          view, match_jd, addr or "",
+                          float(lat) if lat else None, float(lng) if lng else None, is_img,
+                          career=_career_from_field(summ.get("경력", "")),
+                          emp_type=_norm_emp(summ.get("근무형태", "")),
+                          edu_req=_norm_edu(summ.get("학력", "")),
+                          comp_type=summ.get("기업형태", ""), img_urls=img_urls)
+                if _passes(job, filters):                          # 필터 통과분만 수집
+                    out.append(job)
         return out
 
 
 class Jobkorea(_Adapter):
     BASE = "https://www.jobkorea.co.kr"
+    # 서버측 필터 코드(2026-07-03 실측: 건수 2,275→220 검증. ⚠ 광고 카드는 필터 무시하고 섞임 → 클라측 안전망 필수)
+    CAREER = {"신입": "1", "경력": "2", "무관": "4"}
+    EDU = {"학력무관": "0", "고졸": "3", "초대졸": "4", "대졸": "5", "석사": "6", "박사": "7"}
+    JOBTYPE = {"정규직": "1"}    # 정규직만 실측 검증 — 그 외 고용형태는 클라측
+
+    def _server_params(self, f: dict) -> str:
+        """선택 항목 전부가 검증된 코드일 때만 전송(일부만 매핑되면 원하는 공고가 서버에서 잘리므로 미전송)."""
+        extra = ""
+        cars = _career_set(f.get("career"))
+        if cars and all(c in self.CAREER for c in cars):
+            extra += "&careerType=" + ",".join(sorted(self.CAREER[c] for c in cars))
+        edus = f.get("edu") or []
+        if edus and all(e in self.EDU for e in edus):
+            extra += "&edu=" + ",".join(sorted(self.EDU[e] for e in edus))
+        emps = f.get("emp_types") or []
+        if emps and all(e in self.JOBTYPE for e in emps):
+            extra += "&jobtype=" + ",".join(sorted(self.JOBTYPE[e] for e in emps))
+        return extra
 
     async def fetch(self, kw: str, n: int, filters: dict | None = None, skip=None) -> list[Job]:
         out: list[Job] = []
         cap = max(config.SCAN_CAP, n * config.SCAN_PER_TARGET)   # 목표(n) 비례 스캔 깊이
+        extra = self._server_params(filters or {})
         seen: set[str] = set()
         gnos: list[str] = []
         for p in range(1, 12):   # 최신 여러 페이지에서 링크 수집(중복 GI_No 제거) — cap만큼 확보되면 중단
             try:
                 t = LH.fromstring((await self.c.get(
-                    f"{self.BASE}/Search/?stext={quote(kw)}&tabType=recruit&Page_No={p}")).text)
+                    f"{self.BASE}/Search/?stext={quote(kw)}&tabType=recruit&Page_No={p}{extra}")).text)
             except Exception:
                 break
             new = 0
@@ -266,12 +308,16 @@ class Jobkorea(_Adapter):
                         (ogd[0].get("content") if ogd else ""),
                         " ".join(f"{k} {v}" for k, v in summ.items()), tags]
             jd_txt = re.sub(r"\s+", " ", " / ".join(p for p in jd_parts if p)).strip()
+            # 고용형태: 모집요강 원문 + JSON-LD employmentType(영문 리스트) 결합 → emp_set이 복수 제공 판정
+            et_ld = jp.get("employmentType") or ""
+            et_ld = " ".join(et_ld) if isinstance(et_ld, list) else str(et_ld)
             job = Job("잡코리아", jp.get("title", ""),
                       (jp.get("hiringOrganization") or {}).get("name", ""),
                       gurl, jd_txt, addr, lat, lng,
                       career=career,
-                      emp_type=_norm_emp(summ.get("고용형태", "") or summ.get("근무형태", "")),
-                      edu_req=_norm_edu(summ.get("학력", "")))
+                      emp_type=f"{summ.get('고용형태', '') or summ.get('근무형태', '')} {et_ld}".strip(),
+                      # 학력: 모집요강 xpath 실패 시 JSON-LD 폴백(실측: xpath 빈값인데 JSON-LD '대학원(석사) 이상' 누수)
+                      edu_req=_norm_edu(summ.get("학력", "") or str(jp.get("educationRequirements") or "")))
             if not _passes(job, filters):
                 continue
             # 통과분만 전문 JD 확보: 상세요강 iframe(GI_Read_Comt_Ifrm)의 CorpEditor 이미지 → OCR(pipeline)
@@ -300,22 +346,52 @@ class Wanted(_Adapter):
     LOC = {"서울 전체": "seoul.all", "강남구": "seoul.gangnam-gu", "서초구": "seoul.seocho-gu",
            "송파구": "seoul.songpa-gu", "경기": "gyeonggi.all", "인천": "incheon.all",
            "대전": "daejeon.all", "부산": "busan.all"}
+    _SKILL_IDS: dict[str, int | None] = {}   # 스킬명(소문자) → 태그ID 캐시(2026-07-03 실측: Python=1554·머신러닝=10562)
+
+    async def _skill_tag_ids(self, skills: list) -> list[int]:
+        """스킬명 → skill_tags ID (autocomplete API). 미해석 스킬은 서버측 생략(클라 필터가 안전망)."""
+        ids = []
+        for s in [str(x).strip() for x in (skills or [])][:5]:   # 원티드 UI 상한 5개
+            if not s:
+                continue
+            key = s.lower()
+            if key not in Wanted._SKILL_IDS:
+                try:
+                    r = await self.c.get(f"{self.BASE}/api/v4/tags/autocomplete?kinds=SKILL&keyword={quote(s)}")
+                    res = (r.json().get("results") or [])
+                    Wanted._SKILL_IDS[key] = res[0]["id"] if res else None
+                except Exception:
+                    continue                                     # 일시 오류는 캐시 안 함
+            if Wanted._SKILL_IDS.get(key):
+                ids.append(Wanted._SKILL_IDS[key])
+        return ids
 
     async def fetch(self, kw: str, n: int, filters: dict | None = None, skip=None) -> list[Job]:
         out: list[Job] = []
         cap = max(config.SCAN_CAP, n * config.SCAN_PER_TARGET)   # 목표(n) 비례 스캔 깊이
         f = filters or {}
-        params = ["country=kr", f"query={quote(kw)}",
-                  f"limit={min(max(cap, 20), 100)}", "offset=0"]
-        if f.get("career") == "신입":                       # 서버측 경력(신입)
-            params.append("years=0")
+        common = ["country=kr", f"limit={min(max(cap, 20), 100)}", "offset=0"]
+        cars = _career_set(f.get("career"))
+        if "신입" in cars and "경력" not in cars:           # 서버측 경력: 신입(무관 동반 포함)
+            common.append("years=0")                       # 원티드 신입 필터는 "신입-경력N년" 공고 포함(실측) → 무관 손실 미미
         for r in (f.get("regions") or []):                 # 서버측 지역
             if r in self.LOC:
-                params.append(f"locations={self.LOC[r]}")
-        ja = await self.c.get(f"{self.BASE}/api/v4/jobs?" + "&".join(params))
+                common.append(f"locations={self.LOC[r]}")
+        skill_ids = await self._skill_tag_ids(f.get("skills") or [])
+        for i in skill_ids:                                # 서버측 기술스택(반복 파라미터=OR 실측)
+            common.append(f"skill_tags={i}")
+        # ⓐ 검색어 검색(관련성 우선) + ⓑ 스킬 전용 검색(검색어 없이 — 스택 탐색 커버리지, 실측 3건→100건+)
+        wids: list[int] = []
+        ja = await self.c.get(f"{self.BASE}/api/v4/jobs?" + "&".join([f"query={quote(kw)}"] + common))
+        wids += [d["id"] for d in ja.json().get("data", [])]
+        if skill_ids:
+            jb = await self.c.get(f"{self.BASE}/api/v4/jobs?" + "&".join(common))
+            wids += [d["id"] for d in jb.json().get("data", [])]
+            # 서버가 이미 스킬 태그로 걸렀으니 클라측 본문 substring 재검사는 생략(태그 매칭인데 본문 미표기면 오탈락)
+            filters = {k: v for k, v in f.items() if k != "skills"}
         seen: set[str] = set()
         scanned = 0
-        for wid in [d["id"] for d in ja.json().get("data", [])]:
+        for wid in wids:
             if len(out) >= n or scanned >= cap:
                 break
             wurl = f"{self.BASE}/wd/{wid}"

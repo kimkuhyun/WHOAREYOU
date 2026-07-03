@@ -124,7 +124,7 @@ function render(recos, threshold, opts) {
   let sub = '';
   if (opts.note) sub = opts.note + ' · ';
   if (q && q.keyword) {
-    const bits = [q.career, ...(q.regions || [])].filter(Boolean).join('·');
+    const bits = [...(Array.isArray(q.career) ? q.career : [q.career]), ...(q.regions || [])].filter(Boolean).join('·');
     sub += `「${esc(q.keyword)}」${bits ? ` <span class="muted">${esc(bits)}</span>` : ''} · `;
   }
   if (s.crawled != null) sub += `<span class="muted">수집 ${s.crawled}→조건 ${s.filtered}→</span> `;
@@ -320,7 +320,8 @@ async function loadSettings() {
   catch (e) { onErr(e, '설정 불러오기'); return; }
   lastSettings = s; lastKeys = s.keys_set || lastKeys;   // §5·§10 상태 캐시
   $('s_keyword').value = s.keyword || '';
-  setChips('regions', s.regions); setChips('career', [s.career]);
+  $('s_skills').value = (s.skills || []).join(', ');
+  setChips('regions', s.regions); setChips('career', Array.isArray(s.career) ? s.career : [s.career]);
   setChips('edu', s.edu); setChips('emp_types', s.emp_types); setChips('comp_types', s.comp_types);
   $('s_salary').value = s.salary_min;
   $('s_exclude').value = (s.exclude || []).join(', ');
@@ -398,7 +399,8 @@ async function saveSettings() {
   const weights = normWeights({ commute: +$('w_commute').value, jotso: +$('w_jotso').value, reputation: +$('w_rep').value, match: +$('w_match').value });
   const patch = {
     keyword: $('s_keyword').value.trim(),
-    regions: chipVals('regions'), career: chipVals('career')[0] || '신입',
+    skills: $('s_skills').value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 5),
+    regions: chipVals('regions'), career: chipVals('career'),
     edu: chipVals('edu'), emp_types: chipVals('emp_types'), comp_types: chipVals('comp_types'),
     salary_min: $('s_salary').value,
     exclude: $('s_exclude').value.split(',').map(x => x.trim()).filter(Boolean),

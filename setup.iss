@@ -5,7 +5,7 @@
 
 [Setup]
 AppName=WHOAREYOU
-AppVersion=2.0
+AppVersion=2.0.2
 AppPublisher=kimkuhyn
 DefaultDirName={autopf}\WHOAREYOU
 DefaultGroupName=WHOAREYOU
